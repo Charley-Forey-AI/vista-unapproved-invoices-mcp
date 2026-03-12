@@ -1,0 +1,92 @@
+"""Test that cancelled requests don't cause double responses."""
+
+import anyio
+import pytest
+
+from mcp import Client
+from mcp.server import Server, ServerRequestContext
+from mcp.shared.exceptions import MCPError
+from mcp.types import (
+    CallToolRequest,
+    CallToolRequestParams,
+    CallToolResult,
+    CancelledNotification,
+    CancelledNotificationParams,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
+
+
+@pytest.mark.anyio
+async def test_server_remains_functional_after_cancel():
+    """Verify server can handle new requests after a cancellation."""
+
+    # Track tool calls
+    call_count = 0
+    ev_first_call = anyio.Event()
+    first_request_id = None
+
+    async def handle_list_tools(ctx: ServerRequestContext, params: PaginatedRequestParams | None) -> ListToolsResult:
+        return ListToolsResult(
+            tools=[
+                Tool(
+                    name="test_tool",
+                    description="Tool for testing",
+                    input_schema={},
+                )
+            ]
+        )
+
+    async def handle_call_tool(ctx: ServerRequestContext, params: CallToolRequestParams) -> CallToolResult:
+        nonlocal call_count, first_request_id
+        if params.name == "test_tool":
+            call_count += 1
+            if call_count == 1:
+                first_request_id = ctx.request_id
+                ev_first_call.set()
+                await anyio.sleep(5)  # First call is slow
+            return CallToolResult(content=[TextContent(type="text", text=f"Call number: {call_count}")])
+        raise ValueError(f"Unknown tool: {params.name}")  # pragma: no cover
+
+    server = Server("test-server", on_list_tools=handle_list_tools, on_call_tool=handle_call_tool)
+
+    async with Client(server) as client:
+        # First request (will be cancelled)
+        async def first_request():
+            try:
+                await client.session.send_request(
+                    CallToolRequest(params=CallToolRequestParams(name="test_tool", arguments={})),
+                    CallToolResult,
+                )
+                pytest.fail("First request should have been cancelled")  # pragma: no cover
+            except MCPError:
+                pass  # Expected
+
+        # Start first request
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(first_request)
+
+            # Wait for it to start
+            await ev_first_call.wait()
+
+            # Cancel it
+            assert first_request_id is not None
+            await client.session.send_notification(
+                CancelledNotification(
+                    params=CancelledNotificationParams(request_id=first_request_id, reason="Testing server recovery"),
+                )
+            )
+
+        # Second request (should work normally)
+        result = await client.call_tool("test_tool", {})
+
+        # Verify second request completed successfully
+        assert len(result.content) == 1
+        # Type narrowing for pyright
+        content = result.content[0]
+        assert content.type == "text"
+        assert isinstance(content, TextContent)
+        assert content.text == "Call number: 2"
+        assert call_count == 2

@@ -1,0 +1,32 @@
+[project]
+name = "vista-mcp-server"
+version = "0.1.0"
+description = "MCP server for Vista Enterprise, AP, Project, Vendor, and Health APIs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "mcp",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.5.2",
+]
+
+[project.scripts]
+vista-mcp-server = "server.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server"]
+
+[tool.uv.sources]
+mcp = { path = "./python-sdk-main" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

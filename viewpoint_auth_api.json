@@ -1,0 +1,2467 @@
+{
+    "openapi": "3.0.4",
+    "info": {
+      "title": "Viewpoint API v1",
+      "description": "The Viewpoint API provides access to data from the Viewpoint Construction ERPs (Enterprise Resource Planning) software, Vista and Spectrum. Trimble's API's are built to link our construction ERPs with other systems used in the construction industry. The fundamental focus for a construction company is to manage the work and costs necessary to complete a job, which might be referred to as a project. For access to the Trimble Viewpoint APIs, email integration-jumpstart-ug@trimble.com with the enterprise that you would like to use and the Trimble ID associated with your application. The endpoints are sorted alphabetically. The default output page contains 20 records. Data that can be pulled from the ERPs includes but is not limited to company, contract, employee, equipment, project cost, vendor",
+      "version": "1.5.0.0"
+    },
+    "paths": {
+      "/api/v1/auth/clientaccount": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Creates a new ClientAccount",
+          "description": "Creates a new ClientAccount. For tenantRelationship there are two options: Using the SELECTIVE tenantRelationship means that a tenant gets asoociated with a client account or multiple client accounts. Using the INCLUSIVE tenantRelationship means that a tenant has access to all client accounts. It acts like a wildcard.",
+          "operationId": "authorization.ClientAccount.Create",
+          "parameters": [
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateClientAccountBodyRequest"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateClientAccountBodyRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClientAccountRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/segment": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Creates a new Segment",
+          "description": "Creates a new Segment.",
+          "operationId": "authorization.Segment.Create",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSegmentRequest"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSegmentRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SegmentRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/systemadmin": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Creates a new SystemAdmin",
+          "description": "Creates a new SystemAdmin.",
+          "operationId": "authorization.SystemAdmin.Create",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSystemAdminRequest"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSystemAdminRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemAdminGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/tenant": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Creates a new Tenant",
+          "description": "Creates a new Tenant.",
+          "operationId": "authorization.CreateTenant",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTenantRequest"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTenantRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TenantRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/clientaccount/{id}": {
+        "delete": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Delete a ClientAccount",
+          "description": "Deletes a ClientAccount.",
+          "operationId": "authorization.ClientAccount.Delete",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "No Content"
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Get a ClientAccount by Id",
+          "description": "Gets a ClientAccount by Id.",
+          "operationId": "authorization.ClientAccount.GetById",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClientAccountRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Modify a ClientAccount",
+          "description": "Modify a ClientAccount. The 4 options for modifying a clientAccount's segment are 'add', 'update', 'remove', 'none'. 'none' just lists the existing segment and does not change anything.",
+          "operationId": "authorization.ClientAccount.Modify",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifyClientAccountRecord"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifyClientAccountRecord"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClientAccountRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/segment/{id}": {
+        "delete": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Delete a Segment",
+          "description": "Deletes a Segment.",
+          "operationId": "authorization.Segment.Delete",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "No Content"
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Get a Segment by Id",
+          "description": "Gets a Segment by Id.",
+          "operationId": "authorization.Segment.GetById",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SegmentRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Modify a Segment",
+          "description": "Modify a Segment.",
+          "operationId": "authorization.Segment.Modify",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifySegmentRecord"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifySegmentRecord"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SegmentRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/systemadmin/{id}": {
+        "delete": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Delete a SystemAdmin",
+          "description": "Deletes a SystemAdmin.",
+          "operationId": "authorization.SystemAdmin.Delete",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "No Content"
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Get a SystemAdmin by Id",
+          "description": "Gets a SystemAdmin by Id.",
+          "operationId": "authorization.SystemAdmin.GetById",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemAdminGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Modify a SystemAdmin",
+          "description": "Modify a SystemAdmin.",
+          "operationId": "authorization.SystemAdmin.Modify",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifySystemAdminRecord"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifySystemAdminRecord"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemAdminGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/tenant/{id}": {
+        "delete": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Delete a Tenant",
+          "description": "Deletes a Tenant.",
+          "operationId": "authorization.DeleteTenant",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "No Content"
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Get a Tenant by Id",
+          "description": "Gets a Tenant by Id.",
+          "operationId": "authorization.GetTenantById",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TenantRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Modify a Tenant",
+          "description": "Modify a Tenant.",
+          "operationId": "authorization.ModifyTenant",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifyTenantRecord"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModifyTenantRecord"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TenantRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/clientauthorization/{clientId}": {
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Gets authz client bundle by clientid",
+          "description": "Gets authz client bundle by clientid",
+          "operationId": "access.GetClientAuthorization",
+          "parameters": [
+            {
+              "name": "clientId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClientAccountAuthRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/endpoint/{id}": {
+        "get": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "Get an Endpoint by Id",
+          "description": "Gets an Endpoint by Id.",
+          "operationId": "authorization.Endpoint.GetById",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/EndpointRecordGetItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/clientaccount/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List ClientAccounts",
+          "description": "List ClientAccounts",
+          "operationId": "authorization.ClientAccount.List",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAccountRecordFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAccountRecordFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ClientAccountRecordListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/endpoint/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List Endpoints",
+          "description": "List Endpoints",
+          "operationId": "authorization.Endpoint.List",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointRecordFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointRecordFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/EndpointRecordListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/segment/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List Segments",
+          "description": "List Segments",
+          "operationId": "authorization.Segment.List",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentRecordFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentRecordFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SegmentRecordListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/sourceproduct/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List SourceProducts",
+          "description": "List SourceProducts",
+          "operationId": "authorization.SourceProduct.List",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "enterpriseId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceProductRecordFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceProductRecordFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SourceProductRecordListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/systemadmin/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List SystemAdmins",
+          "description": "List SystemAdmins",
+          "operationId": "authorization.SystemAdmin.List",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemAdminFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemAdminFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemAdminListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/tenant/query": {
+        "post": {
+          "tags": [
+            "Authorization Endpoints"
+          ],
+          "summary": "List Tenants",
+          "description": "List Tenants",
+          "operationId": "authorization.ListTenants",
+          "parameters": [
+            {
+              "name": "orderBy",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "orderByAsc",
+              "in": "query",
+              "schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "page",
+              "in": "query",
+              "schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "includes",
+              "in": "query",
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "x-correlation-id",
+              "in": "header",
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRecordFilterBody"
+                }
+              },
+              "application/*+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRecordFilterBody"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OK",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TenantRecordListPagedResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health/ready": {
+        "get": {
+          "tags": [
+            "Health Check Endpoints"
+          ],
+          "summary": "Verify SQL and Blob Storage Connections are ready.",
+          "description": "Checks readiness of the SQL and Azure Blob Storage connections.",
+          "operationId": "HealthCheck.APIHealthCheck",
+          "responses": {
+            "200": {
+              "description": "Healthy",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "properties": {
+                      "Data": {
+                        "type": "object",
+                        "description": "Data"
+                      },
+                      "Description": {
+                        "type": "string",
+                        "description": "Description"
+                      },
+                      "Duration": {
+                        "type": "string",
+                        "description": "Duration"
+                      },
+                      "Exception": {
+                        "type": "object",
+                        "description": "Exception"
+                      },
+                      "Status": {
+                        "type": "object",
+                        "description": "Status"
+                      },
+                      "Tags": {
+                        "type": "object",
+                        "description": "Tags"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Unhealthy",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "properties": {
+                      "Data": {
+                        "type": "object",
+                        "description": "Data"
+                      },
+                      "Description": {
+                        "type": "string",
+                        "description": "Description"
+                      },
+                      "Duration": {
+                        "type": "string",
+                        "description": "Duration"
+                      },
+                      "Exception": {
+                        "type": "object",
+                        "description": "Exception"
+                      },
+                      "Status": {
+                        "type": "object",
+                        "description": "Status"
+                      },
+                      "Tags": {
+                        "type": "object",
+                        "description": "Tags"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health/alive": {
+        "get": {
+          "tags": [
+            "Health Check Endpoints"
+          ],
+          "summary": "Verify Kafka Client is alive.",
+          "description": "Checks that all Kafka consumers are alive and ready.",
+          "operationId": "HealthCheck.ConsumerHealthCheck",
+          "responses": {
+            "200": {
+              "description": "Healthy",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "properties": {
+                      "Data": {
+                        "type": "object",
+                        "description": "Data"
+                      },
+                      "Description": {
+                        "type": "string",
+                        "description": "Description"
+                      },
+                      "Duration": {
+                        "type": "string",
+                        "description": "Duration"
+                      },
+                      "Exception": {
+                        "type": "object",
+                        "description": "Exception"
+                      },
+                      "Status": {
+                        "type": "object",
+                        "description": "Status"
+                      },
+                      "Tags": {
+                        "type": "object",
+                        "description": "Tags"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Unhealthy",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "properties": {
+                      "Data": {
+                        "type": "object",
+                        "description": "Data"
+                      },
+                      "Description": {
+                        "type": "string",
+                        "description": "Description"
+                      },
+                      "Duration": {
+                        "type": "string",
+                        "description": "Duration"
+                      },
+                      "Exception": {
+                        "type": "object",
+                        "description": "Exception"
+                      },
+                      "Status": {
+                        "type": "object",
+                        "description": "Status"
+                      },
+                      "Tags": {
+                        "type": "object",
+                        "description": "Tags"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "ClientAccountAuthRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "sysAdmin": {
+              "type": "boolean"
+            },
+            "tenantRelationship": {
+              "$ref": "#/components/schemas/TenantRelationship"
+            },
+            "tenants": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TenantOpaRecord"
+              },
+              "nullable": true
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SegmentOpaRecord"
+              },
+              "nullable": true
+            },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EndpointOpaRecord"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountAuthRecordGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/ClientAccountAuthRecord"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SegmentRecord"
+              },
+              "nullable": true
+            },
+            "tenantRelationship": {
+              "$ref": "#/components/schemas/TenantRelationship"
+            },
+            "tenants": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TenantRecord"
+              },
+              "nullable": true
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountRecordFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ClientAccountRecordFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountRecordFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountRecordGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/ClientAccountRecord"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ClientAccountRecordListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ClientAccountRecord"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "CreateClientAccountBodyRequest": {
+          "required": [
+            "clientId",
+            "name",
+            "tenantRelationship"
+          ],
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tenantRelationship": {
+              "$ref": "#/components/schemas/TenantRelationship"
+            },
+            "segmentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "tenantIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "CreateSegmentRequest": {
+          "required": [
+            "name"
+          ],
+          "type": "object",
+          "properties": {
+            "correlationId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "clientAccountIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "endpointIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "CreateSystemAdminRequest": {
+          "required": [
+            "trimbleId"
+          ],
+          "type": "object",
+          "properties": {
+            "correlationId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "trimbleId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "CreateTenantRequest": {
+          "required": [
+            "enterpriseId",
+            "sourceProductId"
+          ],
+          "type": "object",
+          "properties": {
+            "correlationId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "enterpriseId": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "sourceProductId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointOpaRecord": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "nullable": true
+            },
+            "supportedSourceProducts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SourceProductRecord"
+              },
+              "nullable": true
+            },
+            "resource": {
+              "type": "string",
+              "nullable": true
+            },
+            "systemAdminOnly": {
+              "type": "boolean"
+            },
+            "tenantable": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "action": {
+              "type": "string",
+              "nullable": true
+            },
+            "resource": {
+              "type": "string",
+              "nullable": true
+            },
+            "systemAdminOnly": {
+              "type": "boolean"
+            },
+            "tenantable": {
+              "type": "boolean"
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointRecordFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EndpointRecordFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointRecordFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointRecordGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/EndpointRecord"
+            }
+          },
+          "additionalProperties": false
+        },
+        "EndpointRecordListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EndpointRecord"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "FilterOperatorViewModel": {
+          "enum": [
+            "Any",
+            "Contains",
+            "Exact",
+            "GreaterThanInclusive",
+            "LessThanInclusive",
+            "RangeInclusive"
+          ],
+          "type": "string"
+        },
+        "HealthCheckResult": {
+          "properties": {
+            "Data": {
+              "type": "object",
+              "description": "Data"
+            },
+            "Description": {
+              "type": "string",
+              "description": "Description"
+            },
+            "Duration": {
+              "type": "string",
+              "description": "Duration"
+            },
+            "Exception": {
+              "type": "object",
+              "description": "Exception"
+            },
+            "Status": {
+              "type": "object",
+              "description": "Status"
+            },
+            "Tags": {
+              "type": "object",
+              "description": "Tags"
+            }
+          }
+        },
+        "ModifyClientAccountRecord": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string",
+              "format": "uuid",
+              "nullable": true
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "tenantRelationship": {
+              "$ref": "#/components/schemas/TenantRelationship"
+            },
+            "segmentIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/RelationshipChange"
+              },
+              "nullable": true
+            },
+            "tenantIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/RelationshipChange"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "ModifySegmentRecord": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "clientAccounts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/RelationshipChange"
+              },
+              "nullable": true
+            },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/RelationshipChange"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "ModifySystemAdminRecord": {
+          "type": "object",
+          "properties": {
+            "trimbleId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ModifyTenantRecord": {
+          "type": "object",
+          "properties": {
+            "enterpriseId": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "sourceProductId": {
+              "type": "string",
+              "format": "uuid",
+              "nullable": true
+            },
+            "clientAccountIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "RelationshipAction": {
+          "enum": [
+            "None",
+            "Add",
+            "Remove"
+          ],
+          "type": "string"
+        },
+        "RelationshipChange": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "action": {
+              "$ref": "#/components/schemas/RelationshipAction"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentOpaRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "nullable": true
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EndpointRecord"
+              },
+              "nullable": true
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentRecordFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SegmentRecordFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentRecordFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentRecordGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/SegmentRecord"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SegmentRecordListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SegmentRecord"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SourceProductRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "endpointIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "name": {
+              "type": "string",
+              "nullable": true
+            },
+            "tenantIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SourceProductRecordFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SourceProductRecordFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "SourceProductRecordFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "SourceProductRecordListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SourceProductRecord"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SystemAdmin": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "trimbleId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SystemAdminFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SystemAdminFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "SystemAdminFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "SystemAdminGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/SystemAdmin"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SystemAdminListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SystemAdmin"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantOpaRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "sourceProduct": {
+              "$ref": "#/components/schemas/SourceProductRecord"
+            },
+            "clientAccounts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "enterpriseId": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRecord": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "lastUpdateDateUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "clientAccountIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "nullable": true
+            },
+            "enterpriseId": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "sourceProductId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "updatedBy": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRecordFilterBody": {
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TenantRecordFilterViewModel"
+              },
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRecordFilterViewModel": {
+          "required": [
+            "field",
+            "operator",
+            "values"
+          ],
+          "type": "object",
+          "properties": {
+            "field": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/components/schemas/FilterOperatorViewModel"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRecordGetItemResponse": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/TenantRecord"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRecordListPagedResponse": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TenantRecord"
+              },
+              "nullable": true
+            },
+            "pageSize": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "currentPage": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TenantRelationship": {
+          "enum": [
+            "Selective",
+            "Inclusive"
+          ],
+          "type": "string"
+        }
+      },
+      "securitySchemes": {
+        "Bearer": {
+          "type": "apiKey",
+          "description": "JWT Authorization header using the Bearer scheme.\nEnter 'Bearer <access token>' in the text input below.",
+          "name": "Authorization",
+          "in": "header"
+        }
+      }
+    },
+    "security": [
+      {
+        "Bearer": [ ]
+      }
+    ],
+    "tags": [
+      {
+        "name": "Authorization Endpoints",
+        "description": "These endpoints are used for the management of API authorization."
+      }
+    ]
+  }

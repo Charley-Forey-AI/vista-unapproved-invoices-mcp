@@ -1,0 +1,2 @@
+"""Vista MCP server package."""
+

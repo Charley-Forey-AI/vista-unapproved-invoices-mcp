@@ -5,15 +5,19 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 from uuid import UUID
 
-from pydantic import Field
-from pydantic import ValidationError
-
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+from pydantic import Field, ValidationError
+from starlette.requests import Request
+from starlette.responses import Response
 
 from .api import VistaApiClient
+from .auth import TrimbleTokenVerifier
 from .config import VistaSettings
 from .models import (
     EnterpriseGetResponse,
@@ -33,6 +37,7 @@ from .models import (
 )
 from .prompts import register_prompts
 from .resources import register_resources
+from .token_manager import TidTokenManager
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,58 @@ def _to_json(data: object) -> str:
 def create_server(settings: VistaSettings) -> MCPServer:
     """Create and configure the Vista MCP server instance."""
 
-    api = VistaApiClient(settings)
+    token_manager: TidTokenManager | None = None
+    if settings.auth_mode == "server-managed":
+        assert settings.client_id is not None
+        assert settings.client_secret is not None
+        assert settings.refresh_token is not None
+        token_url = settings.token_url
+        if not token_url:
+            assert settings.auth_issuer is not None
+            token_url = f"{settings.auth_issuer.rstrip('/')}/oauth/token"
+        token_manager = TidTokenManager(
+            client_id=settings.client_id,
+            client_secret=settings.client_secret,
+            refresh_token=settings.refresh_token,
+            token_url=token_url,
+            access_token=settings.access_token,
+            scope=settings.normalized_scope(),
+        )
+
+    api = VistaApiClient(settings, token_manager=token_manager)
+    token_verifier: TrimbleTokenVerifier | None = None
+    auth_settings: AuthSettings | None = None
+    delegated_mode = settings.auth_mode in {"delegated", "hybrid"}
+
+    if delegated_mode:
+        assert settings.auth_issuer is not None
+        assert settings.auth_jwks_url is not None
+        assert settings.auth_resource_server_url is not None
+        required_scopes = settings.required_scopes()
+        auth_settings = AuthSettings(
+            issuer_url=settings.auth_issuer,
+            required_scopes=required_scopes,
+            resource_server_url=settings.auth_resource_server_url,
+        )
+        token_verifier = TrimbleTokenVerifier(
+            issuer=settings.auth_issuer,
+            jwks_url=settings.auth_jwks_url,
+            audience=settings.auth_audience,
+            required_scopes=required_scopes,
+            jwks_cache_ttl_seconds=settings.auth_jwks_cache_ttl_seconds,
+            jwt_leeway_seconds=settings.auth_jwt_leeway_seconds,
+        )
+
+    @asynccontextmanager
+    async def lifespan(_: MCPServer):
+        try:
+            yield
+        finally:
+            await api.close()
+            if token_manager is not None:
+                await token_manager.close()
+            if token_verifier is not None:
+                await token_verifier.close()
 
     mcp = MCPServer(
         name="vista",
@@ -56,7 +112,66 @@ def create_server(settings: VistaSettings) -> MCPServer:
             "vista://guides/workflows, vista://guides/response-interpretation, vista://guides/filters, and "
             "vista://guides/errors-and-edge-cases."
         ),
+        auth=auth_settings,
+        token_verifier=token_verifier,
+        lifespan=lifespan,
     )
+
+    # Compatibility route: some MCP clients attempt path-based OAuth metadata
+    # discovery on the MCP host (/.well-known/oauth-authorization-server/mcp).
+    # In delegated/hybrid mode we are a resource server, so return metadata that
+    # points clients to the external Trimble authorization server.
+    if delegated_mode:
+        assert settings.auth_issuer is not None
+        issuer = settings.auth_issuer.rstrip("/")
+        metadata_payload: dict[str, Any] = {
+            "issuer": issuer,
+            "authorization_endpoint": f"{issuer}/oauth/authorize",
+            "token_endpoint": f"{issuer}/oauth/token",
+            "jwks_uri": settings.auth_jwks_url,
+            "scopes_supported": settings.required_scopes() or None,
+            "response_types_supported": ["code", "token", "id_token"],
+            "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic"],
+        }
+        metadata_payload = {k: v for k, v in metadata_payload.items() if v is not None}
+
+        async def oauth_authorization_server_metadata(_: Request) -> Response:
+            return Response(
+                content=json.dumps(metadata_payload),
+                media_type="application/json",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                },
+            )
+
+        @mcp.custom_route("/.well-known/oauth-authorization-server/mcp", methods=["GET", "OPTIONS"])
+        async def oauth_authorization_server_metadata_path(request: Request) -> Response:
+            if request.method == "OPTIONS":
+                return Response(
+                    status_code=204,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET, OPTIONS",
+                        "Access-Control-Allow-Headers": "*",
+                    },
+                )
+            return await oauth_authorization_server_metadata(request)
+
+        @mcp.custom_route("/.well-known/openid-configuration/mcp", methods=["GET", "OPTIONS"])
+        async def oidc_metadata_path(request: Request) -> Response:
+            if request.method == "OPTIONS":
+                return Response(
+                    status_code=204,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET, OPTIONS",
+                        "Access-Control-Allow-Headers": "*",
+                    },
+                )
+            return await oauth_authorization_server_metadata(request)
 
     def resolve_enterprise_id(enterprise_id: int | None) -> int:
         effective = enterprise_id if enterprise_id is not None else settings.enterprise_id
@@ -130,11 +245,18 @@ def create_server(settings: VistaSettings) -> MCPServer:
         tool_name: str,
         operation: Callable[[], Awaitable[str]],
     ) -> str:
+        request_token = None
+        if delegated_mode:
+            access_token = get_access_token()
+            request_token = access_token.token if access_token else None
+        reset_token = api.set_request_bearer_token(request_token)
         try:
             return await operation()
         except (ValueError, RuntimeError, ValidationError):
             logger.exception("Tool failed: %s", tool_name)
             raise
+        finally:
+            api.reset_request_bearer_token(reset_token)
 
     @mcp.tool(
         description=(
@@ -178,7 +300,10 @@ def create_server(settings: VistaSettings) -> MCPServer:
         ),
         order_by: str | None = Field(default=None, description="Optional orderBy query value."),
         order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
-        limit: int | None = Field(default=None, description="Optional page size. Response includes pageSize/currentPage."),
+        limit: int | None = Field(
+            default=None,
+            description="Optional page size. Response includes pageSize/currentPage.",
+        ),
         page: int | None = Field(default=None, description="Optional page index. Use with limit for pagination."),
         includes: str | None = Field(default=None, description="Optional includes query value."),
         correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
@@ -217,7 +342,10 @@ def create_server(settings: VistaSettings) -> MCPServer:
             ),
             order_by: str | None = Field(default=None, description="Optional orderBy query value."),
             order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
-            limit: int | None = Field(default=None, description="Optional page size. Response includes pageSize/currentPage."),
+            limit: int | None = Field(
+                default=None,
+                description="Optional page size. Response includes pageSize/currentPage.",
+            ),
             page: int | None = Field(default=None, description="Optional page index. Use with limit for pagination."),
             includes: str | None = Field(default=None, description="Optional includes query value."),
             correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
@@ -293,7 +421,12 @@ def create_server(settings: VistaSettings) -> MCPServer:
         correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
     ) -> str:
         async def run() -> str:
-            payload = await api.get_unapproved_invoice(resolve_enterprise_id(enterprise_id), str(id), includes, correlation_id)
+            payload = await api.get_unapproved_invoice(
+                resolve_enterprise_id(enterprise_id),
+                str(id),
+                includes,
+                correlation_id,
+            )
             parsed = UnapprovedInvoiceGetResponse.model_validate(payload)
             return _to_json(parsed.model_dump(by_alias=True, exclude_none=True))
 
@@ -348,7 +481,10 @@ def create_server(settings: VistaSettings) -> MCPServer:
         ),
         order_by: str | None = Field(default=None, description="Optional orderBy query value."),
         order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
-        limit: int | None = Field(default=None, description="Optional page size. Response includes pageSize/currentPage."),
+        limit: int | None = Field(
+            default=None,
+            description="Optional page size. Response includes pageSize/currentPage.",
+        ),
         page: int | None = Field(default=None, description="Optional page index. Use with limit for pagination."),
         includes: str | None = Field(default=None, description="Optional includes query value."),
         correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
@@ -412,7 +548,10 @@ def create_server(settings: VistaSettings) -> MCPServer:
         ),
         order_by: str | None = Field(default=None, description="Optional orderBy query value."),
         order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
-        limit: int | None = Field(default=None, description="Optional page size. Response includes pageSize/currentPage."),
+        limit: int | None = Field(
+            default=None,
+            description="Optional page size. Response includes pageSize/currentPage.",
+        ),
         page: int | None = Field(default=None, description="Optional page index. Use with limit for pagination."),
         includes: str | None = Field(default=None, description="Optional includes query value."),
         correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
@@ -477,7 +616,10 @@ def create_server(settings: VistaSettings) -> MCPServer:
         ),
         order_by: str | None = Field(default=None, description="Optional orderBy query value."),
         order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
-        limit: int | None = Field(default=None, description="Optional page size. Response includes pageSize/currentPage."),
+        limit: int | None = Field(
+            default=None,
+            description="Optional page size. Response includes pageSize/currentPage.",
+        ),
         page: int | None = Field(default=None, description="Optional page index. Use with limit for pagination."),
         includes: str | None = Field(default=None, description="Optional includes query value."),
         correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
@@ -540,8 +682,9 @@ def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
     try:
         settings = VistaSettings()
+        settings.validate_startup()
         server = create_server(settings)
-    except ValidationError:
+    except (ValidationError, ValueError):
         logger.exception("Startup validation failed. Set VISTA_API_BASE_URL and auth values; see .env.example.")
         sys.exit(1)
 

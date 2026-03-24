@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+
+# Sensitive local artifacts
+invoicecopies/
+*.pem
+*.key

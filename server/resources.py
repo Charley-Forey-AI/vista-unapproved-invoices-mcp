@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 
-def register_resources(mcp: MCPServer) -> None:
+def register_resources(mcp: FastMCP) -> None:
     """Register static resources describing ID dependencies and workflow order."""
 
     @mcp.resource(

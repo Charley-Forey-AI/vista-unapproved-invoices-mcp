@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 
-def register_prompts(mcp: MCPServer) -> None:
+def register_prompts(mcp: FastMCP) -> None:
     """Register prompts that help clients choose and sequence tools correctly."""
 
     @mcp.prompt(

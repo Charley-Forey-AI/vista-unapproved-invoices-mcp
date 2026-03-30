@@ -17,7 +17,7 @@ class VistaApiClient:
     def __init__(self, settings: VistaSettings, token_manager: TidTokenManager | None = None):
         self._settings = settings
         self._token_manager = token_manager
-        self._api_base_url = str(settings.api_base_url).rstrip("/")
+        self._api_base_url = self._normalize_api_base_url(str(settings.api_base_url))
         health_base = settings.health_base_url or settings.api_base_url
         self._health_base_url = str(health_base).rstrip("/")
         self._timeout = settings.request_timeout_seconds
@@ -26,6 +26,15 @@ class VistaApiClient:
         self._request_bearer_token: contextvars.ContextVar[str | None] = contextvars.ContextVar(
             "vista_request_bearer_token", default=None
         )
+
+    @staticmethod
+    def _normalize_api_base_url(raw_url: str) -> str:
+        """Normalize base URL so endpoint paths don't duplicate /api/v1."""
+
+        normalized = raw_url.rstrip("/")
+        if normalized.lower().endswith("/api/v1"):
+            return normalized[:-7]
+        return normalized
 
     async def close(self) -> None:
         """Close underlying HTTP client resources."""

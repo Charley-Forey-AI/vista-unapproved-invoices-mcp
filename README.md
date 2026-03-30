@@ -6,7 +6,6 @@ MCP server exposing Vista Enterprise, Unapproved Invoice, Project, Vendor, and H
 
 - Python 3.10+
 - [`uv`](https://docs.astral.sh/uv/)
-- `python-sdk-main` directory present at the repository root (used as the local `mcp` dependency source)
 
 ## Install
 
@@ -21,6 +20,8 @@ uv sync
 Copy `.env.example` to `.env` and populate values:
 
 - Required: `VISTA_API_BASE_URL`
+  - Use the API host root (for example `https://integrations-qa.centralus.cloudapp.azure.com`).
+  - Do not include a trailing `/api/v1`; tool paths already append `/api/v1/...`.
 - Required auth mode: set `VISTA_AUTH_MODE` to one of:
   - `static`: use `VISTA_BEARER_TOKEN` or `VISTA_API_KEY`
   - `delegated`: require per-request bearer token validation
@@ -50,7 +51,7 @@ Copy `.env.example` to `.env` and populate values:
 From the repository root:
 
 ```bash
-uv run server.main
+uv run vista-mcp-server
 ```
 
 Or through the script entrypoint:
@@ -78,19 +79,19 @@ Set:
 Then run:
 
 ```bash
-uv run server.main
+uv run vista-mcp-server
 ```
 
 Set `VISTA_MCP_TRANSPORT=streamable-http` in `.env`, or set it in your shell before launching:
 
 ```powershell
 $env:VISTA_MCP_TRANSPORT="streamable-http"
-uv run server.main
+uv run vista-mcp-server
 ```
 
 ```bash
 export VISTA_MCP_TRANSPORT=streamable-http
-uv run server.main
+uv run vista-mcp-server
 ```
 
 The MCP endpoint URL is typically:
@@ -130,7 +131,7 @@ Quick check:
 1. Set `VISTA_AUTH_MODE=server-managed` and `VISTA_MCP_TRANSPORT=streamable-http`.
 2. Populate `VISTA_CLIENT_ID`, `VISTA_CLIENT_SECRET`, `VISTA_REFRESH_TOKEN`, and `VISTA_AUTH_ISSUER`.
 3. Optionally set `VISTA_ACCESS_TOKEN` and `VISTA_SCOPE=openid vista_agent`.
-4. Start server with `uv run server.main` and call a Vista-backed tool.
+4. Start server with `uv run vista-mcp-server` and call a Vista-backed tool.
 
 ## Agent Studio auth mode mapping
 

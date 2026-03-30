@@ -11,7 +11,7 @@ from uuid import UUID
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 from pydantic import Field, ValidationError
 from starlette.requests import Request
 from starlette.responses import Response
@@ -46,7 +46,7 @@ def _to_json(data: object) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
-def create_server(settings: VistaSettings) -> MCPServer:
+def create_server(settings: VistaSettings) -> FastMCP:
     """Create and configure the Vista MCP server instance."""
 
     token_manager: TidTokenManager | None = None
@@ -92,7 +92,7 @@ def create_server(settings: VistaSettings) -> MCPServer:
         )
 
     @asynccontextmanager
-    async def lifespan(_: MCPServer):
+    async def lifespan(_: FastMCP):
         try:
             yield
         finally:
@@ -102,16 +102,20 @@ def create_server(settings: VistaSettings) -> MCPServer:
             if token_verifier is not None:
                 await token_verifier.close()
 
-    mcp = MCPServer(
+    mcp = FastMCP(
         name="vista",
-        title="Vista API MCP Server",
-        description=(
+        instructions=(
             "Tools for Enterprise, Unapproved Invoice, Project, Vendor, and Health APIs. "
             "Tool descriptions include dependency guidance and response interpretation hints so IDs can be "
             "discovered and reused with follow-up tools. For complex tasks, read vista://guides/dependencies, "
             "vista://guides/workflows, vista://guides/response-interpretation, vista://guides/filters, and "
             "vista://guides/errors-and-edge-cases."
         ),
+        host=settings.mcp_host,
+        port=settings.mcp_port,
+        streamable_http_path=settings.mcp_streamable_http_path,
+        json_response=settings.mcp_json_response,
+        stateless_http=settings.mcp_stateless_http,
         auth=auth_settings,
         token_verifier=token_verifier,
         lifespan=lifespan,
@@ -689,14 +693,7 @@ def main() -> None:
         sys.exit(1)
 
     if settings.mcp_transport == "streamable-http":
-        server.run(
-            transport="streamable-http",
-            host=settings.mcp_host,
-            port=settings.mcp_port,
-            streamable_http_path=settings.mcp_streamable_http_path,
-            json_response=settings.mcp_json_response,
-            stateless_http=settings.mcp_stateless_http,
-        )
+        server.run(transport="streamable-http")
         return
 
     server.run(transport="stdio")

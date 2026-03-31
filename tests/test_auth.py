@@ -25,11 +25,13 @@ class _FakeResponse:
 class _FakeAsyncClient:
     def __init__(self, payload: dict[str, Any]):
         self._payload = payload
+        self.is_closed = False
 
     async def get(self, _: str) -> _FakeResponse:
         return _FakeResponse(self._payload)
 
     async def aclose(self) -> None:
+        self.is_closed = True
         return None
 
 
@@ -130,3 +132,43 @@ async def test_trimble_token_verifier_rejects_missing_scope() -> None:
 
     result = await verifier.verify_token(token)
     assert result is None
+
+
+@pytest.mark.anyio
+async def test_trimble_token_verifier_recreates_closed_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    issuer = "https://stage.id.trimblecloud.com"
+    private_key, jwk = _build_rsa_material("kid-refresh-client")
+    created_clients: list[_FakeAsyncClient] = []
+
+    def _fake_async_client_factory(*_: Any, **__: Any) -> _FakeAsyncClient:
+        client = _FakeAsyncClient({"keys": [jwk]})
+        created_clients.append(client)
+        return client
+
+    monkeypatch.setattr("server.auth.httpx.AsyncClient", _fake_async_client_factory)
+    verifier = TrimbleTokenVerifier(
+        issuer=issuer,
+        jwks_url=f"{issuer}/.well-known/jwks.json",
+        required_scopes=["agents"],
+        audience="vista-api",
+    )
+
+    assert created_clients
+    created_clients[0].is_closed = True
+
+    token = jwt.encode(
+        {
+            "iss": issuer,
+            "sub": "user-123",
+            "aud": ["vista-api"],
+            "scope": "agents",
+            "exp": int(time.time()) + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "kid-refresh-client"},
+    )
+
+    result = await verifier.verify_token(token)
+    assert result is not None
+    assert len(created_clients) == 2

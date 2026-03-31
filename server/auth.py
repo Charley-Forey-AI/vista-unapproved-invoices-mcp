@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -43,13 +44,17 @@ class TrimbleTokenVerifier(TokenVerifier):
         self._audience = audience
         self._jwks_cache_ttl_seconds = jwks_cache_ttl_seconds
         self._jwt_leeway_seconds = jwt_leeway_seconds
+        self._timeout_seconds = timeout_seconds
         self._jwks_cache: JwksCache | None = None
-        self._client = httpx.AsyncClient(timeout=timeout_seconds)
+        self._client: httpx.AsyncClient | None = httpx.AsyncClient(timeout=timeout_seconds)
+        self._refresh_lock = asyncio.Lock()
 
     async def close(self) -> None:
         """Release verifier resources."""
 
-        await self._client.aclose()
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Validate JWT and return token metadata when valid."""
@@ -117,24 +122,38 @@ class TrimbleTokenVerifier(TokenVerifier):
         return None
 
     async def _refresh_jwks(self) -> None:
-        response = await self._client.get(self._jwks_url)
-        response.raise_for_status()
-        payload = response.json()
-        keys = payload.get("keys", []) if isinstance(payload, dict) else []
+        async with self._refresh_lock:
+            # Another coroutine may have refreshed while we were waiting.
+            now = time.time()
+            if self._jwks_cache and self._jwks_cache.expires_at > now:
+                return
 
-        key_map: dict[str, dict[str, Any]] = {}
-        for key in keys:
-            if not isinstance(key, dict):
-                continue
-            kid = key.get("kid")
-            if not kid:
-                continue
-            key_map[str(kid)] = key
+            client = self._ensure_client()
+            response = await client.get(self._jwks_url)
+            response.raise_for_status()
+            payload = response.json()
+            keys = payload.get("keys", []) if isinstance(payload, dict) else []
 
-        self._jwks_cache = JwksCache(
-            keys=key_map,
-            expires_at=time.time() + self._jwks_cache_ttl_seconds,
-        )
+            key_map: dict[str, dict[str, Any]] = {}
+            for key in keys:
+                if not isinstance(key, dict):
+                    continue
+                kid = key.get("kid")
+                if not kid:
+                    continue
+                key_map[str(kid)] = key
+
+            self._jwks_cache = JwksCache(
+                keys=key_map,
+                expires_at=time.time() + self._jwks_cache_ttl_seconds,
+            )
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        client = self._client
+        if client is None or getattr(client, "is_closed", False):
+            client = httpx.AsyncClient(timeout=self._timeout_seconds)
+            self._client = client
+        return client
 
 
 def _extract_scopes(payload: dict[str, Any]) -> list[str]:

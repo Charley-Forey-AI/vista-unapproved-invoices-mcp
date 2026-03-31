@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from typing import Any
 
@@ -23,6 +24,12 @@ class TidTokenManager:
         access_token: str | None = None,
         scope: str | None = None,
         refresh_skew_seconds: int = 60,
+        timeout_seconds: float = 20.0,
+        retry_attempts: int = 3,
+        retry_base_seconds: float = 0.75,
+        retry_max_seconds: float = 8.0,
+        retry_jitter_seconds: float = 0.25,
+        retry_status_codes: set[int] | None = None,
     ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
@@ -30,7 +37,13 @@ class TidTokenManager:
         self._token_url = token_url
         self._refresh_skew_seconds = refresh_skew_seconds
         self._lock = asyncio.Lock()
-        self._client = httpx.AsyncClient(timeout=15.0)
+        self._timeout_seconds = timeout_seconds
+        self._retry_attempts = max(0, retry_attempts)
+        self._retry_base_seconds = max(0.0, retry_base_seconds)
+        self._retry_max_seconds = max(0.0, retry_max_seconds)
+        self._retry_jitter_seconds = max(0.0, retry_jitter_seconds)
+        self._retry_status_codes = retry_status_codes or {429, 500, 502, 503, 504}
+        self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
         self._refresh_token = refresh_token
         self._access_token = access_token
         self._access_token_expires_at = _extract_exp(access_token)
@@ -95,7 +108,7 @@ class TidTokenManager:
 
     async def _request_refresh(self, *, include_scope: bool) -> httpx.Response:
         if getattr(self._client, "is_closed", False):
-            self._client = httpx.AsyncClient(timeout=15.0)
+            self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
         body = {
             "grant_type": "refresh_token",
             "refresh_token": self._refresh_token,
@@ -103,12 +116,39 @@ class TidTokenManager:
         if include_scope and self._scope:
             body["scope"] = self._scope
 
-        return await self._client.post(
-            self._token_url,
-            data=body,
-            auth=httpx.BasicAuth(self._client_id, self._client_secret),
-            headers={"Accept": "application/json"},
-        )
+        attempt = 0
+        while True:
+            try:
+                response = await self._client.post(
+                    self._token_url,
+                    data=body,
+                    auth=httpx.BasicAuth(self._client_id, self._client_secret),
+                    headers={"Accept": "application/json"},
+                )
+            except httpx.RequestError:
+                if attempt >= self._retry_attempts:
+                    raise
+                await asyncio.sleep(self._retry_delay(attempt))
+                attempt += 1
+                continue
+
+            if response.status_code in self._retry_status_codes and attempt < self._retry_attempts:
+                await asyncio.sleep(self._retry_delay(attempt, retry_after=response.headers.get("Retry-After")))
+                attempt += 1
+                continue
+            return response
+
+    def _retry_delay(self, attempt: int, *, retry_after: str | None = None) -> float:
+        if retry_after:
+            try:
+                delay = float(retry_after)
+                if delay >= 0:
+                    return min(self._retry_max_seconds, delay)
+            except ValueError:
+                pass
+        base = min(self._retry_max_seconds, self._retry_base_seconds * (2**attempt))
+        jitter = random.uniform(0.0, self._retry_jitter_seconds) if self._retry_jitter_seconds > 0 else 0.0
+        return min(self._retry_max_seconds, base + jitter)
 
 
 def _extract_exp(token: str | None) -> float | None:

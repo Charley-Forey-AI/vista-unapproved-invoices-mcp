@@ -75,6 +75,36 @@ async def test_trimble_token_verifier_accepts_valid_token() -> None:
 
 
 @pytest.mark.anyio
+async def test_trimble_token_verifier_accepts_when_audience_in_allowed_list() -> None:
+    issuer = "https://stage.id.trimblecloud.com"
+    private_key, jwk = _build_rsa_material("kid-aud-list")
+
+    verifier = TrimbleTokenVerifier(
+        issuer=issuer,
+        jwks_url=f"{issuer}/.well-known/jwks.json",
+        required_scopes=["agents"],
+        audience=["vista-api", "vista-alt-audience"],
+    )
+    verifier._client = _FakeAsyncClient({"keys": [jwk]})  # type: ignore[assignment]
+
+    token = jwt.encode(
+        {
+            "iss": issuer,
+            "sub": "user-123",
+            "aud": ["vista-alt-audience"],
+            "scope": "agents",
+            "exp": int(time.time()) + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "kid-aud-list"},
+    )
+
+    result = await verifier.verify_token(token)
+    assert result is not None
+
+
+@pytest.mark.anyio
 async def test_trimble_token_verifier_rejects_missing_scope() -> None:
     issuer = "https://stage.id.trimblecloud.com"
     private_key, jwk = _build_rsa_material("kid-scope")

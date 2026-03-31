@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +11,8 @@ import httpx
 import jwt
 from jwt import InvalidTokenError
 from mcp.server.auth.provider import AccessToken, TokenVerifier
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,9 +32,10 @@ class TrimbleTokenVerifier(TokenVerifier):
         issuer: str,
         jwks_url: str,
         required_scopes: list[str],
-        audience: str | None = None,
+        audience: str | list[str] | None = None,
         jwks_cache_ttl_seconds: int = 300,
         jwt_leeway_seconds: int = 60,
+        timeout_seconds: float = 15.0,
     ) -> None:
         self._issuer = issuer.rstrip("/")
         self._jwks_url = jwks_url
@@ -40,7 +44,7 @@ class TrimbleTokenVerifier(TokenVerifier):
         self._jwks_cache_ttl_seconds = jwks_cache_ttl_seconds
         self._jwt_leeway_seconds = jwt_leeway_seconds
         self._jwks_cache: JwksCache | None = None
-        self._client = httpx.AsyncClient(timeout=10.0)
+        self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
     async def close(self) -> None:
         """Release verifier resources."""
@@ -54,10 +58,12 @@ class TrimbleTokenVerifier(TokenVerifier):
             header = jwt.get_unverified_header(token)
             kid = header.get("kid")
             if not kid:
+                _log_token_rejection("missing_kid", token)
                 return None
 
             key_data = await self._get_key_for_kid(kid)
             if not key_data:
+                _log_token_rejection("jwks_kid_not_found", token)
                 return None
 
             public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
@@ -72,13 +78,21 @@ class TrimbleTokenVerifier(TokenVerifier):
                 options=decode_options,
                 leeway=self._jwt_leeway_seconds,
             )
-        except InvalidTokenError:
+        except InvalidTokenError as exc:
+            _log_token_rejection("jwt_validation_failed", token, error=str(exc))
             return None
-        except ValueError:
+        except ValueError as exc:
+            _log_token_rejection("jwt_value_error", token, error=str(exc))
             return None
 
         scopes = _extract_scopes(payload)
         if not _has_required_scopes(scopes, self._required_scopes):
+            missing_scopes = [scope for scope in self._required_scopes if scope not in set(scopes)]
+            _log_token_rejection(
+                "missing_required_scopes",
+                token,
+                extra={"required_scopes": self._required_scopes, "missing_scopes": missing_scopes},
+            )
             return None
 
         expires_at_raw = payload.get("exp")
@@ -137,3 +151,48 @@ def _has_required_scopes(scopes: list[str], required_scopes: list[str]) -> bool:
         return True
     available = set(scopes)
     return all(scope in available for scope in required_scopes)
+
+
+def _log_token_rejection(
+    reason: str,
+    token: str,
+    *,
+    error: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    claims = _extract_safe_claims(token)
+    payload: dict[str, Any] = {"reason": reason, "claims": claims}
+    if error:
+        payload["error"] = error
+    if extra:
+        payload.update(extra)
+    logger.warning("delegated token rejected: %s", payload)
+
+
+def _extract_safe_claims(token: str) -> dict[str, Any]:
+    try:
+        claims = jwt.decode(
+            token,
+            options={"verify_signature": False, "verify_exp": False, "verify_nbf": False},
+            algorithms=["RS256", "HS256", "none"],
+        )
+    except Exception:
+        return {}
+
+    now = int(time.time())
+    exp_raw = claims.get("exp")
+    exp = int(exp_raw) if isinstance(exp_raw, (int, float)) else None
+    expiry_skew_seconds = exp - now if exp is not None else None
+    safe_scope = claims.get("scope")
+    if isinstance(safe_scope, list):
+        safe_scope = " ".join(str(item) for item in safe_scope)
+
+    return {
+        "iss": claims.get("iss"),
+        "aud": claims.get("aud"),
+        "scope": safe_scope,
+        "azp": claims.get("azp"),
+        "sub": claims.get("sub"),
+        "exp": exp,
+        "expiry_skew_seconds": expiry_skew_seconds,
+    }

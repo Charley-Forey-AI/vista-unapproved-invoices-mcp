@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import json
+
 from mcp.server.fastmcp import FastMCP
 
+from .config import VistaSettings
+from .api import get_api_metrics_snapshot
+from .endpoint_registry import endpoint_dependency_graph
+from .tool_factory import get_analysis_metrics_snapshot, get_tool_metrics_snapshot
 
-def register_resources(mcp: FastMCP) -> None:
+
+def register_resources(mcp: FastMCP, settings: VistaSettings) -> None:
     """Register static resources describing ID dependencies and workflow order."""
 
     @mcp.resource(
@@ -40,6 +47,99 @@ def register_resources(mcp: FastMCP) -> None:
 
 See also: `vista://guides/workflows`, `vista://guides/response-interpretation`, `vista://guides/filters`, `vista://guides/errors-and-edge-cases`, `vista://guides/scenarios`
 """
+
+    @mcp.resource(
+        "vista://schema/tool-graph",
+        name="vista-tool-graph",
+        title="Vista Tool Dependency Graph",
+        description="Machine-readable tool dependency/IO graph for agent planning.",
+        mime_type="application/json",
+    )
+    def tool_graph() -> str:
+        graph = endpoint_dependency_graph(settings)
+        return json.dumps(graph, indent=2)
+
+    @mcp.resource(
+        "vista://schema/planner",
+        name="vista-tool-planner",
+        title="Vista Tool Planner",
+        description="Intent-based sequencing hints and decision rules for tool orchestration.",
+        mime_type="application/json",
+    )
+    def tool_planner() -> str:
+        graph = endpoint_dependency_graph(settings)
+        planner = {
+            "version": graph.get("version"),
+            "workflows": graph.get("workflows", []),
+            "notes": [
+                "Prefer list tools to discover IDs before get/create calls.",
+                "Use id_sources for resolving missing required inputs.",
+                "Honor safe_to_retry when implementing retry loops in clients.",
+            ],
+        }
+        return json.dumps(planner, indent=2)
+
+    @mcp.resource(
+        "vista://metrics/tool-usage",
+        name="vista-tool-usage-metrics",
+        title="Vista Tool Usage Metrics",
+        description="In-memory counters and latency totals by tool.",
+        mime_type="application/json",
+    )
+    def tool_usage_metrics() -> str:
+        return json.dumps(get_tool_metrics_snapshot(), indent=2)
+
+    @mcp.resource(
+        "vista://metrics/analysis-ops",
+        name="vista-analysis-ops-metrics",
+        title="Vista Analysis Ops Metrics",
+        description="In-memory counters for analysis runs, cache usage, and incremental runs.",
+        mime_type="application/json",
+    )
+    def analysis_ops_metrics() -> str:
+        return json.dumps(get_analysis_metrics_snapshot(), indent=2)
+
+    @mcp.resource(
+        "vista://metrics/api-transport",
+        name="vista-api-transport-metrics",
+        title="Vista API Transport Metrics",
+        description="In-memory transport-level reliability counters (retries, network errors, partial collections).",
+        mime_type="application/json",
+    )
+    def api_transport_metrics() -> str:
+        return json.dumps(get_api_metrics_snapshot(), indent=2)
+
+    @mcp.resource(
+        "vista://ops/reliability-policy",
+        name="vista-reliability-policy",
+        title="Vista Reliability Policy",
+        description="Active retry and canary rollback thresholds used for production hardening.",
+        mime_type="application/json",
+    )
+    def reliability_policy() -> str:
+        payload = {
+            "retries": {
+                "attempts": settings.transient_retry_attempts,
+                "baseSeconds": settings.transient_retry_base_seconds,
+                "maxSeconds": settings.transient_retry_max_seconds,
+                "jitterSeconds": settings.transient_retry_jitter_seconds,
+                "statusCodes": sorted(settings.retry_status_codes()),
+            },
+            "analysis": {
+                "cacheBackend": settings.analysis_cache_backend,
+                "cacheTtlSeconds": settings.analysis_cache_ttl_seconds,
+                "failOnPartial": settings.analysis_fail_on_partial,
+                "maxConcurrentRuns": settings.max_concurrent_analysis_runs,
+                "maxConcurrentRequests": settings.max_concurrent_requests,
+            },
+            "canary": {
+                "enabled": settings.reliability_canary_enabled,
+                "sampleRate": settings.reliability_canary_sample_rate,
+                "rollbackErrorRateThreshold": settings.reliability_rollback_error_rate_threshold,
+                "rollbackP95MsThreshold": settings.reliability_rollback_p95_ms_threshold,
+            },
+        }
+        return json.dumps(payload, indent=2)
 
     @mcp.resource(
         "vista://guides/workflows",

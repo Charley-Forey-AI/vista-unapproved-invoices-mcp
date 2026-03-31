@@ -1,275 +1,421 @@
 # Vista MCP Server
 
-MCP server exposing Vista Enterprise, Company, Contract, Customer, Project, PO, AP, Vendor, and Health endpoints.
+Production-focused MCP server for Vista APIs, with strong auth options, schema-backed validation, queue-first invoice review workflows, and built-in operational telemetry.
 
-## Endpoint Coverage
+## What This Server Provides
 
-The server registers tools from a central endpoint registry (`server/endpoint_registry.py`) and validates response payloads with generated schema adapters (`server/generated_models.py`).
+- Unified MCP tools across Enterprise, Company, Contract, Customer, Project, JC, PO, AP, Vendor, and Health domains.
+- Read-only invoice risk analysis and reviewer workflows with deterministic queue pagination.
+- Multiple auth modes (`static`, `delegated`, `hybrid`, `server-managed`) for local and hosted MCP clients.
+- Registry-first tool definitions, OpenAPI-backed request/response validation, and normalized output modes for agent chaining.
+- Runtime safety controls for write access, bulk limits, retries, cache behavior, and canary guardrails.
 
-Covered endpoint families:
+## Quick Start (5 minutes)
 
-- Enterprise (`get_enterprise`, `list_enterprises`, optional `test_list_enterprises`)
-- Company, Contract, Customer (`get_*`, `list_*`)
-- Project (`get_project`, `list_projects`)
-- Project Cost Entry (`create_daily_production`, `get_daily_production_action`, `get_unposted_daily_production`, `list_unposted_daily_production`)
-- Project Cost History (`get_project_cost_history`, `list_project_cost_history`)
-- Project Phase (`get_project_phase`, `list_project_phases`)
-- Purchase Order (`create_purchase_orders`, `get_purchase_order`, `get_purchase_order_action`, `get_unposted_purchase_order`, `list_purchase_orders`, `list_unposted_purchase_orders`)
-- Unapproved Invoice (`create_unapproved_invoices`, `get_unapproved_invoice`, `get_unapproved_invoice_action`, `query_unapproved_invoices`)
-- Analysis (`analyze_unapproved_invoices`) for read-only portfolio triage and reviewer-ready risk buckets (deleted invoices are excluded; compact output is default for large backlogs)
-- Review workflow tools (`list_invoice_review_queues`, `get_invoice_queue_page`, `get_invoice_review_packet`, `capture_invoice_review_decision`, `preflight_invoice_approval`, `export_invoice_audit`)
-- Sales Tax, Schedule of Values, Standard Cost Type, Standard Phase (`get_*`, `list_*`)
-- Subcontract (`get_subcontract`, `list_subcontracts`)
-- Vendor + Vendor Alternate Address (`get_*`, `list_*`)
-- Health (`health_ready`, optional `health_alive`)
+### 1) Prerequisites
 
-## Organization And Conventions
-
-- Registry-first design: endpoint metadata (method/path/schema refs/tool names) lives in `server/endpoint_registry.py`.
-- Generic execution path: `VistaApiClient.call_endpoint()` handles path interpolation, `orderBy`/`orderByAsc`/`limit`/`page`/`includes`, bulk request bodies, and health auth bypass.
-- Shared tool factory: `server/tool_factory.py` registers tools by endpoint kind (`get`, `list`, `bulk`, `health`) with consistent signatures.
-- Validation:
-  - list/query requests normalize to `{ filters: [] }` using `QueryFilter`.
-  - bulk requests normalize to `{ items: [...] }` and use typed request models generated from OpenAPI schema refs.
-  - responses are validated against generated schema-specific adapters from `server/generated_models.py`.
-- Output modes:
-  - each tool accepts `output=raw|normalized|both` (default `raw`)
-  - `normalized` returns snake_case data with `tool_name`, `schema_ref`, and canonical metadata for agent chaining
-- Preflight validation:
-  - each bulk write tool has a paired preflight tool named `validate_<tool>_request`
-  - preflight validates required fields, policy gates, enterprise context, and typed request contract without calling Vista
-- Feature flags:
-  - `VISTA_INCLUDE_TEST_ENTERPRISE_TOOL` controls `test_list_enterprises`
-  - `VISTA_INCLUDE_HEALTH_ALIVE_TOOL` controls `health_alive`
-- Machine-readable planning:
-  - `vista://schema/tool-graph` exposes dependencies with `requires`, `produces`, `prerequisites`, `id_sources`, `safe_to_retry`.
-  - `vista://schema/planner` provides intent-based tool order + decision rules.
-- Observability:
-  - `vista://metrics/tool-usage` exposes in-memory call, success/failure, and latency counters by tool.
-- Permission-aware behavior:
-  - `list_enterprises`/`test_list_enterprises` may require elevated permissions.
-  - when those calls are forbidden (403) and `VISTA_ENTERPRISE_ID` is configured, the server falls back to `get_enterprise`.
-
-## Prerequisites
-
-- Python 3.10+
+- Python `3.10+`
 - [`uv`](https://docs.astral.sh/uv/)
 
-## Install
-
-From the repository root:
+### 2) Install dependencies
 
 ```bash
 uv sync
 ```
 
-## Configure environment
+For local development tooling (`pytest`, `ruff`):
 
-Copy `.env.example` to `.env` and populate values:
+```bash
+uv sync --group dev
+```
 
-- Required: `VISTA_API_BASE_URL`
-  - Use the API host root (for example `https://integrations-qa.centralus.cloudapp.azure.com`).
-  - Do not include a trailing `/api/v1`; tool paths already append `/api/v1/...`.
-- Required auth mode: set `VISTA_AUTH_MODE` to one of:
-  - `static`: use `VISTA_BEARER_TOKEN` or `VISTA_API_KEY`
-  - `delegated`: require per-request actor token validation (no static fallback)
-  - `hybrid`: prefer per-request bearer token, fallback to static credentials
-  - `server-managed`: use `VISTA_CLIENT_ID`/`VISTA_CLIENT_SECRET` + `VISTA_REFRESH_TOKEN` and refresh TID access tokens in memory
-- Optional delegated strategy:
-  - `VISTA_AUTH_STRATEGY=delegated_passthrough` (default): forward actor token directly to Vista
-  - `VISTA_AUTH_STRATEGY=token_exchange`: exchange actor token for Vista token before Vista calls (with in-memory cache and expiry-aware reuse)
-- Required for `static`: one of `VISTA_BEARER_TOKEN` or `VISTA_API_KEY`
-- Required for `server-managed`:
-  - `VISTA_CLIENT_ID`
-  - `VISTA_CLIENT_SECRET`
-  - `VISTA_REFRESH_TOKEN`
-  - `VISTA_AUTH_ISSUER` (or explicit `VISTA_TOKEN_URL`)
-- Optional for `server-managed`:
-  - `VISTA_ACCESS_TOKEN` (seed token used until near expiry/401)
-  - `VISTA_SCOPE` (space-delimited, example `openid vista_agent`)
-- Required for `delegated`/`hybrid`:
-  - `VISTA_AUTH_ISSUER`
-  - `VISTA_AUTH_JWKS_URL`
-  - `VISTA_AUTH_RESOURCE_SERVER_URL`
-- Optional for delegated validation:
-  - `VISTA_AUTH_AUDIENCE`
-  - `VISTA_AUTH_REQUIRED_SCOPES` (space- or comma-delimited)
-- Optional for `token_exchange` strategy:
-  - `VISTA_TOKEN_EXCHANGE_TOKEN_URL` (otherwise uses `VISTA_TOKEN_URL` or `<VISTA_AUTH_ISSUER>/oauth/token`)
-  - `VISTA_TOKEN_EXCHANGE_SCOPE`
-  - `VISTA_TOKEN_EXCHANGE_AUDIENCE`
-- Optional: `VISTA_ENTERPRISE_ID` to avoid passing `enterprise_id` on every scoped request
-- Optional: `VISTA_MAX_BULK_ITEMS` to cap bulk create payload size (default `100`)
-- Optional: `VISTA_MAX_BATCH_SIZE` override for bulk create cap (takes precedence)
-- Optional: `VISTA_READ_ONLY_MODE=true` to disable all write/bulk tools
-- Optional: `VISTA_WRITE_ENABLED_DOMAINS` allowlist for writes (example `ap,po,jc`)
-- Optional transient retry controls:
-  - `VISTA_TRANSIENT_RETRY_ATTEMPTS` (default `3`)
-  - `VISTA_TRANSIENT_RETRY_BASE_SECONDS` (default `0.75`)
-  - `VISTA_TRANSIENT_RETRY_MAX_SECONDS` (default `8.0`)
-  - `VISTA_TRANSIENT_RETRY_JITTER_SECONDS` (default `0.25`)
-  - `VISTA_TRANSIENT_RETRY_STATUS_CODES` (default `429,500,502,503,504`)
-- Optional request timeout and connection controls:
-  - `VISTA_REQUEST_TIMEOUT_SECONDS` (default `45`)
-  - `VISTA_REQUEST_CONNECT_TIMEOUT_SECONDS` (default `10`)
-  - `VISTA_REQUEST_READ_TIMEOUT_SECONDS` (default `45`)
-  - `VISTA_REQUEST_WRITE_TIMEOUT_SECONDS` (default `30`)
-  - `VISTA_REQUEST_POOL_TIMEOUT_SECONDS` (default `10`)
-  - `VISTA_REQUEST_MAX_CONNECTIONS` (default `100`)
-  - `VISTA_REQUEST_MAX_KEEPALIVE_CONNECTIONS` (default `40`)
-  - `VISTA_MAX_CONCURRENT_REQUESTS` (default `32`)
-  - `VISTA_MAX_CONCURRENT_ANALYSIS_RUNS` (default `4`)
-- Optional unapproved invoice analysis controls:
-  - `VISTA_ANALYSIS_DEFAULT_WINDOW_DAYS` (default `365`)
-  - `VISTA_ANALYSIS_DEFAULT_TOP_N` (default `5`)
-  - `VISTA_ANALYSIS_PAGE_SIZE` (default `100`)
-  - `VISTA_ANALYSIS_MAX_PAGES` (default `10`)
-  - `VISTA_ANALYSIS_STALE_DAYS` (default `30`)
-  - `VISTA_ANALYSIS_HIGH_AMOUNT_THRESHOLD` (default `50000`)
-  - `VISTA_ANALYSIS_DUPLICATE_AMOUNT_DELTA` (default `0.01`)
-  - `VISTA_ANALYSIS_POLICY_PROFILE` (`standard|strict|lenient`, default `standard`)
-  - `VISTA_ANALYSIS_CACHE_TTL_SECONDS` (default `180`)
-  - `VISTA_ANALYSIS_CACHE_BACKEND` (`memory|redis`, default `memory`)
-  - `VISTA_ANALYSIS_CACHE_PREFIX` (default `vista:analysis`)
-  - `VISTA_ANALYSIS_FAIL_ON_PARTIAL` (default `false`)
-  - `VISTA_REDIS_URL` (required when `VISTA_ANALYSIS_CACHE_BACKEND=redis`)
-- Optional token and JWKS timeout controls:
-  - `VISTA_TOKEN_HTTP_TIMEOUT_SECONDS` (default `20`)
-  - `VISTA_AUTH_JWKS_TIMEOUT_SECONDS` (default `15`)
-  - `VISTA_TOKEN_EXCHANGE_CACHE_TTL_SECONDS` (default `300`)
-  - `VISTA_TOKEN_EXCHANGE_REFRESH_SKEW_SECONDS` (default `30`)
-- Optional canary rollout guardrails:
-  - `VISTA_RELIABILITY_CANARY_ENABLED` (default `false`)
-  - `VISTA_RELIABILITY_CANARY_SAMPLE_RATE` (default `0.1`)
-  - `VISTA_RELIABILITY_ROLLBACK_ERROR_RATE_THRESHOLD` (default `0.05`)
-  - `VISTA_RELIABILITY_ROLLBACK_P95_MS_THRESHOLD` (default `4000`)
-- `analyze_unapproved_invoices` response controls:
-  - `detail_level=compact|full` (default `compact`)
-  - `max_items_per_bucket` (compact mode queue sample cap, default `25`)
-  - `max_vendor_groups` (compact mode vendor rollup cap, default `25`)
-  - `incremental_since` (ISO timestamp watermark for incremental analysis mode)
+### 3) Configure environment
 
-## Queue-First Review Pattern
+Copy `.env.example` to `.env` and set at minimum:
 
-- Run `list_invoice_review_queues` to create a run and receive queue counts.
-- Page a queue with `get_invoice_queue_page` using `nextCursor`.
-- Pull single-invoice packet via `get_invoice_review_packet`.
-- Record reviewer outcome with `capture_invoice_review_decision`.
-- Gate action readiness using `preflight_invoice_approval`.
-- Export traceability report using `export_invoice_audit`.
-- Health tools do not require auth
+- `VISTA_API_BASE_URL` (host root only, no trailing `/api/v1`)
+- `VISTA_AUTH_MODE`
+- Auth-specific required variables (see the auth matrix below)
 
-## Reliability Runbook (Production)
-
-- **Degraded analysis handling**: if `collection.partial=true`, treat response as degraded and retry before taking approval action.
-- **Strict completeness mode**: set `VISTA_ANALYSIS_FAIL_ON_PARTIAL=true` or pass `require_complete=true` to fail fast instead of returning partial analysis.
-- **Scale-safe cache mode**: for multi-instance deployments set `VISTA_ANALYSIS_CACHE_BACKEND=redis` and configure `VISTA_REDIS_URL`.
-- **Rollback guardrails**: monitor `vista://metrics/api-transport`, `vista://metrics/analysis-ops`, and `vista://metrics/tool-usage`; revert canary when error rate or p95 exceeds `vista://ops/reliability-policy` thresholds.
-- **Retry tuning path**: increase `VISTA_TRANSIENT_RETRY_ATTEMPTS` and timeout settings in small increments, then validate using canary metrics before global rollout.
-
-## Run
-
-From the repository root:
+### 4) Start server
 
 ```bash
 uv run vista-mcp-server
 ```
 
-Or through the script entrypoint:
+The console script entrypoint is defined in `pyproject.toml` as `server.main:main`.
+
+## Auth Modes And Transport Matrix
+
+`VISTA_AUTH_MODE` controls how outbound Vista credentials are resolved.
+
+| Mode | Intended use | Required settings | Transport requirement |
+| --- | --- | --- | --- |
+| `static` | Simple local testing or service token usage | `VISTA_BEARER_TOKEN` or `VISTA_API_KEY` | `stdio` or `streamable-http` |
+| `delegated` | Strict on-behalf-of actor token flow | `VISTA_AUTH_ISSUER`, `VISTA_AUTH_JWKS_URL`, `VISTA_AUTH_RESOURCE_SERVER_URL` | `streamable-http` required |
+| `hybrid` | Delegated first, static fallback | Delegated settings + static credential (`VISTA_BEARER_TOKEN` or `VISTA_API_KEY`) | `streamable-http` required |
+| `server-managed` | MCP server owns TID refresh lifecycle | `VISTA_CLIENT_ID`, `VISTA_CLIENT_SECRET`, `VISTA_REFRESH_TOKEN`, and `VISTA_AUTH_ISSUER` (or `VISTA_TOKEN_URL`) | `streamable-http` required |
+
+### Delegated auth strategy
+
+`VISTA_AUTH_STRATEGY` applies when request tokens are present:
+
+- `delegated_passthrough` (default): forwards actor token directly to Vista.
+- `token_exchange`: exchanges actor token at OAuth token endpoint before Vista calls.
+
+Token exchange requires OAuth client credentials and token URL resolution (`VISTA_TOKEN_EXCHANGE_TOKEN_URL` or fallback to `VISTA_TOKEN_URL` / issuer token endpoint).
+
+## Environment Configuration Reference
+
+### Core
+
+- `VISTA_API_BASE_URL` (**required**): API host root (example: `https://integrations-qa.centralus.cloudapp.azure.com`).
+- `VISTA_ENTERPRISE_ID` (optional): default enterprise context when tool call omits `enterprise_id`.
+- `VISTA_CORRELATION_ID` (optional): default `x-correlation-id` header.
+
+### Static auth
+
+- `VISTA_BEARER_TOKEN` (optional; required if no API key)
+- `VISTA_API_KEY` (optional; required if no bearer token)
+- `VISTA_API_KEY_HEADER` (default: `x-api-key`)
+
+### Delegated / hybrid auth
+
+- `VISTA_AUTH_ISSUER` (**required** for delegated/hybrid)
+- `VISTA_AUTH_JWKS_URL` (**required** for delegated/hybrid)
+- `VISTA_AUTH_RESOURCE_SERVER_URL` (**required** for delegated/hybrid)
+- `VISTA_AUTH_AUDIENCE` (optional)
+- `VISTA_AUTH_REQUIRED_SCOPES` (optional, space/comma delimited)
+- `VISTA_AUTH_JWKS_CACHE_TTL_SECONDS` (default: `300`)
+- `VISTA_AUTH_JWT_LEEWAY_SECONDS` (default: `60`)
+
+### Token exchange (optional delegated strategy)
+
+- `VISTA_TOKEN_EXCHANGE_TOKEN_URL`
+- `VISTA_TOKEN_EXCHANGE_SCOPE`
+- `VISTA_TOKEN_EXCHANGE_AUDIENCE`
+- `VISTA_TOKEN_EXCHANGE_SUBJECT_TOKEN_TYPE` (default JWT token-type urn)
+- `VISTA_TOKEN_EXCHANGE_REQUESTED_TOKEN_TYPE` (default access-token urn)
+- `VISTA_TOKEN_EXCHANGE_CACHE_TTL_SECONDS` (default: `300`)
+- `VISTA_TOKEN_EXCHANGE_REFRESH_SKEW_SECONDS` (default: `30`)
+
+### Server-managed TID refresh
+
+- `VISTA_CLIENT_ID` (**required**)
+- `VISTA_CLIENT_SECRET` (**required**)
+- `VISTA_REFRESH_TOKEN` (**required**)
+- `VISTA_AUTH_ISSUER` or `VISTA_TOKEN_URL` (**required**)
+- `VISTA_ACCESS_TOKEN` (optional seed token)
+- `VISTA_SCOPE` (optional, space-delimited; example `openid vista_agent`)
+
+### MCP transport
+
+- `VISTA_MCP_TRANSPORT` = `stdio` (default) or `streamable-http`
+- `VISTA_MCP_HOST` (default: `127.0.0.1`)
+- `VISTA_MCP_PORT` (default: `8000`)
+- `VISTA_MCP_STREAMABLE_HTTP_PATH` (default: `/mcp`)
+- `VISTA_MCP_JSON_RESPONSE` (default: `false`)
+- `VISTA_MCP_STATELESS_HTTP` (default: `false`)
+
+### Request timeouts, pooling, and bulkheads
+
+- `VISTA_REQUEST_TIMEOUT_SECONDS` (default: `45`)
+- `VISTA_REQUEST_CONNECT_TIMEOUT_SECONDS` (default: `10`)
+- `VISTA_REQUEST_READ_TIMEOUT_SECONDS` (default: `45`)
+- `VISTA_REQUEST_WRITE_TIMEOUT_SECONDS` (default: `30`)
+- `VISTA_REQUEST_POOL_TIMEOUT_SECONDS` (default: `10`)
+- `VISTA_REQUEST_MAX_CONNECTIONS` (default: `100`)
+- `VISTA_REQUEST_MAX_KEEPALIVE_CONNECTIONS` (default: `40`)
+- `VISTA_MAX_CONCURRENT_REQUESTS` (default: `32`)
+- `VISTA_MAX_CONCURRENT_ANALYSIS_RUNS` (default: `4`)
+
+### Retry and reliability controls
+
+- `VISTA_TRANSIENT_RETRY_ATTEMPTS` (default: `3`)
+- `VISTA_TRANSIENT_RETRY_BASE_SECONDS` (default: `0.75`)
+- `VISTA_TRANSIENT_RETRY_MAX_SECONDS` (default: `8.0`)
+- `VISTA_TRANSIENT_RETRY_JITTER_SECONDS` (default: `0.25`)
+- `VISTA_TRANSIENT_RETRY_STATUS_CODES` (default: `429,500,502,503,504`)
+
+### Write-safety controls
+
+- `VISTA_READ_ONLY_MODE` (default: `false`) disables write/bulk tools.
+- `VISTA_WRITE_ENABLED_DOMAINS` (optional allowlist, example: `ap,po,jc`).
+- `VISTA_MAX_BULK_ITEMS` (default: `100`)
+- `VISTA_MAX_BATCH_SIZE` (optional override, takes precedence)
+
+### Analysis controls
+
+- `VISTA_ANALYSIS_DEFAULT_WINDOW_DAYS` (default: `365`)
+- `VISTA_ANALYSIS_DEFAULT_TOP_N` (default: `5`)
+- `VISTA_ANALYSIS_PAGE_SIZE` (default: `100`)
+- `VISTA_ANALYSIS_MAX_PAGES` (default: `10`)
+- `VISTA_ANALYSIS_STALE_DAYS` (default: `30`)
+- `VISTA_ANALYSIS_HIGH_AMOUNT_THRESHOLD` (default: `50000`)
+- `VISTA_ANALYSIS_DUPLICATE_AMOUNT_DELTA` (default: `0.01`)
+- `VISTA_ANALYSIS_POLICY_PROFILE` (`standard|strict|lenient`, default `standard`)
+- `VISTA_ANALYSIS_CACHE_BACKEND` (`memory|redis`, default `memory`)
+- `VISTA_ANALYSIS_CACHE_TTL_SECONDS` (default: `180`)
+- `VISTA_ANALYSIS_CACHE_PREFIX` (default: `vista:analysis`)
+- `VISTA_ANALYSIS_FAIL_ON_PARTIAL` (default: `false`)
+- `VISTA_REDIS_URL` (**required** when cache backend = `redis`)
+
+### Optional feature flags
+
+- `VISTA_INCLUDE_TEST_ENTERPRISE_TOOL` (default: `true`)
+- `VISTA_INCLUDE_HEALTH_ALIVE_TOOL` (default: `true`)
+
+### Canary guardrails
+
+- `VISTA_RELIABILITY_CANARY_ENABLED` (default: `false`)
+- `VISTA_RELIABILITY_CANARY_SAMPLE_RATE` (default: `0.1`)
+- `VISTA_RELIABILITY_ROLLBACK_ERROR_RATE_THRESHOLD` (default: `0.05`)
+- `VISTA_RELIABILITY_ROLLBACK_P95_MS_THRESHOLD` (default: `4000`)
+
+## Running The Server
+
+### STDIO mode (default)
+
+Use for clients that spawn the process directly.
 
 ```bash
 uv run vista-mcp-server
 ```
 
-## Transport modes
+### Streamable HTTP mode
 
-### STDIO (default)
-
-- Keep `VISTA_MCP_TRANSPORT=stdio` (or unset it)
-- Best for local MCP clients that launch the server process directly
-
-### Streamable HTTP
-
-Set:
-
-- `VISTA_MCP_TRANSPORT=streamable-http`
-- `VISTA_MCP_HOST` (default `127.0.0.1`)
-- `VISTA_MCP_PORT` (default `8000`)
-- `VISTA_MCP_STREAMABLE_HTTP_PATH` (default `/mcp`)
-
-Then run:
+Set transport and run:
 
 ```bash
 uv run vista-mcp-server
 ```
 
-Set `VISTA_MCP_TRANSPORT=streamable-http` in `.env`, or set it in your shell before launching:
+PowerShell example:
 
 ```powershell
 $env:VISTA_MCP_TRANSPORT="streamable-http"
+$env:VISTA_MCP_HOST="127.0.0.1"
+$env:VISTA_MCP_PORT="8000"
+$env:VISTA_MCP_STREAMABLE_HTTP_PATH="/mcp"
 uv run vista-mcp-server
 ```
+
+Typical endpoint URL:
+
+- `http://127.0.0.1:8000/mcp`
+
+When exposing through tunnel/proxy, set `VISTA_MCP_HOST=0.0.0.0`.
+
+## Tool Inventory
+
+Tools are declared centrally in `server/endpoint_registry.py` and registered by `server/tool_factory.py`.
+
+### Endpoint families
+
+- Enterprise: `get_enterprise`, `list_enterprises`, optional `test_list_enterprises`
+- Company / Contract / Customer: `get_*`, `list_*`
+- Project: `get_project`, `list_projects`
+- Project Cost Entry: `create_daily_production`, `get_daily_production_action`, `get_unposted_daily_production`, `list_unposted_daily_production`
+- Project Cost History: `get_project_cost_history`, `list_project_cost_history`
+- Project Phase: `get_project_phase`, `list_project_phases`
+- Purchase Order: `create_purchase_orders`, `get_purchase_order`, `get_purchase_order_action`, `get_unposted_purchase_order`, `list_purchase_orders`, `list_unposted_purchase_orders`
+- Unapproved Invoice: `create_unapproved_invoices`, `get_unapproved_invoice`, `get_unapproved_invoice_action`, `query_unapproved_invoices`
+- Sales Tax / Schedule Of Values / Standard Cost Type / Standard Phase: `get_*`, `list_*`
+- Subcontract: `get_subcontract`, `list_subcontracts`
+- Vendor + vendor alternate address: `get_*`, `list_*`
+- Health: `health_ready`, optional `health_alive` (health tools bypass auth)
+
+### Analysis and review tools
+
+- `analyze_unapproved_invoices`
+- `list_invoice_review_queues`
+- `get_invoice_queue_page`
+- `get_invoice_review_packet`
+- `capture_invoice_review_decision`
+- `preflight_invoice_approval`
+- `export_invoice_audit`
+
+### Bulk preflight tools
+
+For each bulk write tool, a preflight validator is registered as:
+
+- `validate_<tool_name>_request`
+
+These validate request shape and policy constraints without calling Vista.
+
+## Universal Tool Behaviors
+
+### Output mode
+
+Every tool accepts:
+
+- `output=raw` (default): original payload
+- `output=normalized`: snake_case `data` plus `tool_name` and `schema_ref`
+- `output=both`: `{ raw, normalized }`
+
+### Query normalization
+
+List/query-style inputs normalize to:
+
+```json
+{"filters": []}
+```
+
+### Bulk normalization and safety
+
+- Single item and list item forms normalize to `{ "items": [...] }`.
+- Bulk requests are capped by `effective_max_batch_size` (`VISTA_MAX_BATCH_SIZE` or `VISTA_MAX_BULK_ITEMS`).
+- `dry_run=true` validates payload contracts without API mutation.
+
+### Enterprise scope resolution
+
+For scoped endpoints:
+
+1. explicit `enterprise_id` argument
+2. fallback `VISTA_ENTERPRISE_ID`
+3. otherwise fail with actionable error
+
+### Permission-aware enterprise fallback
+
+If enterprise list endpoints (`/api/v1/enterprise` or test variant) return `403` and `VISTA_ENTERPRISE_ID` is set, tool execution falls back to `get_enterprise`.
+
+## Queue-First Invoice Review Workflow
+
+Recommended review path:
+
+1. `list_invoice_review_queues` to create a run and get queue counts/top risks.
+2. `get_invoice_queue_page` with `queue` + `nextCursor` for deterministic pagination.
+3. `get_invoice_review_packet` for single-invoice context and findings.
+4. `capture_invoice_review_decision` to store reviewer rationale.
+5. `preflight_invoice_approval` to evaluate readiness and blockers.
+6. `export_invoice_audit` for run-level traceability payload.
+
+Notes:
+
+- Run state is ephemeral in-memory (`AnalysisRunStore`) with TTL-based pruning.
+- Cursor values are offset-encoded tokens.
+- `analyze_unapproved_invoices` defaults to compact queue samples to avoid oversized payloads.
+
+## Built-In MCP Resources
+
+Resources are registered in `server/resources.py`.
+
+### Guides
+
+- `vista://guides/dependencies`
+- `vista://guides/workflows`
+- `vista://guides/response-interpretation`
+- `vista://guides/filters`
+- `vista://guides/errors-and-edge-cases`
+- `vista://guides/scenarios`
+
+### Planning schema
+
+- `vista://schema/tool-graph` (machine-readable dependency graph with `requires`, `produces`, `prerequisites`, `id_sources`, `safe_to_retry`)
+- `vista://schema/planner` (intent-level sequencing hints)
+
+### Metrics and policy
+
+- `vista://metrics/tool-usage`
+- `vista://metrics/analysis-ops`
+- `vista://metrics/api-transport`
+- `vista://ops/reliability-policy`
+
+## Built-In MCP Prompts
+
+Prompts are registered in `server/prompts.py`:
+
+- `create_unapproved_invoice_workflow`
+- `investigate_invoice_workflow`
+- `filter_and_enrich_invoices_workflow`
+- `handle_invoice_create_partial_failure_workflow`
+- `discover_enterprise_and_vendor_before_create_workflow`
+
+## Reliability And Production Runbook
+
+- Treat `collection.partial=true` as degraded data; retry before approval actions.
+- For strict completeness, set `VISTA_ANALYSIS_FAIL_ON_PARTIAL=true` or call analysis with `require_complete=true`.
+- In multi-instance deployments, set `VISTA_ANALYSIS_CACHE_BACKEND=redis` + `VISTA_REDIS_URL`.
+- Monitor rollback guardrails via `vista://metrics/*` and `vista://ops/reliability-policy`.
+- Tune retries/timeouts incrementally, validate with canary metrics, then promote globally.
+
+## Local Development
+
+### Run tests
 
 ```bash
-export VISTA_MCP_TRANSPORT=streamable-http
-uv run vista-mcp-server
+uv run pytest
 ```
 
-The MCP endpoint URL is typically:
+### Lint
 
-`http://127.0.0.1:8000/mcp`
+```bash
+uv run ruff check .
+```
 
-When exposing the server through ngrok, set `VISTA_MCP_HOST=0.0.0.0` so external Host headers are accepted.
+### Package metadata
 
-For Agent Studio production usage, pair `streamable-http` with `VISTA_AUTH_MODE=delegated` or `hybrid`.
-The server validates incoming bearer tokens against Trimble JWKS and forwards a validated delegated token to Vista API.
-In `delegated` mode, requests without actor tokens fail immediately with a clear error.
+- Project metadata and runtime dependencies live in `pyproject.toml`.
+- OpenAPI source contracts are `viewpoint_common_api.json` and `viewpoint_auth_api.json`.
 
-## Scope formatting note
+## Architecture Overview
 
-When requesting OAuth tokens with `application/x-www-form-urlencoded`, send scope as a space-delimited string:
+- `server/main.py`: startup, auth wiring, transport run mode, route compatibility metadata.
+- `server/config.py`: settings model and startup validation rules.
+- `server/api.py`: HTTP client, retries, auth header resolution, partial collection handling.
+- `server/tool_factory.py`: tool registration, query/bulk normalization, output mode handling, analysis/review tools.
+- `server/endpoint_registry.py`: declarative endpoint metadata and dependency graph synthesis.
+- `server/generated_models.py`: OpenAPI schema-ref to runtime Pydantic adapter mapping.
+- `server/services/invoice_analysis.py`: risk scoring and queue classification logic.
+- `server/services/analysis_cache.py`: memory/Redis cache abstraction with singleflight.
+- `server/services/analysis_runs.py`: in-memory run and decision store.
+- `server/auth.py`: delegated JWT verification via JWKS.
+- `server/token_manager.py`: server-managed refresh token lifecycle.
+- `server/token_exchange.py`: OAuth token exchange with caching/retry behavior.
 
-- `scope=kb models kb-ingest agents`
+## Client Configuration Notes
 
-Do not wrap the full scope string in quotes. In `.env`, use:
+### Cursor MCP
 
-- `VISTA_SCOPE=openid vista_agent`
+- STDIO: configure command execution (for example `uv ... run server.main` or `uv run vista-mcp-server`).
+- Streamable HTTP: connect Cursor to your `/mcp` URL instead of launching a process.
+- Ensure env vars are present in the same environment Cursor uses.
 
-For delegated validation, set `VISTA_AUTH_REQUIRED_SCOPES` to scopes that are actually present in incoming access tokens.
-If your delegated tokens contain only `vista_agent`, use:
+### Agent Studio
 
-- `VISTA_AUTH_REQUIRED_SCOPES=vista_agent`
+- Connection auth `None` -> use `VISTA_AUTH_MODE=server-managed`.
+- Connection auth on-behalf-of actor token -> use `VISTA_AUTH_MODE=delegated` or `hybrid`.
+- Start with `VISTA_AUTH_STRATEGY=delegated_passthrough`; switch to `token_exchange` only if Vista token audience/type requirements demand it.
 
-Requiring scopes that are not present (for example adding `openid` when the token does not include it) causes authentication failures.
+## Troubleshooting
 
-## Server-managed TID refresh behavior
+### Startup validation fails
 
-- `server-managed` mode keeps access/refresh tokens in memory and refreshes before expiry (and once on Vista 401).
-- Refreshed tokens are not written back to `.env`.
-- Use streamable-http for this mode.
+- `VISTA_AUTH_MODE=static requires ...`: provide `VISTA_BEARER_TOKEN` or `VISTA_API_KEY`.
+- Delegated/hybrid mode errors: ensure `streamable-http` transport and delegated settings are complete.
+- `server-managed requires streamable-http`: set `VISTA_MCP_TRANSPORT=streamable-http`.
+- Redis cache error: set `VISTA_REDIS_URL` when `VISTA_ANALYSIS_CACHE_BACKEND=redis`.
 
-Quick check:
+### Auth failures at runtime
 
-1. Set `VISTA_AUTH_MODE=server-managed` and `VISTA_MCP_TRANSPORT=streamable-http`.
-2. Populate `VISTA_CLIENT_ID`, `VISTA_CLIENT_SECRET`, `VISTA_REFRESH_TOKEN`, and `VISTA_AUTH_ISSUER`.
-3. Optionally set `VISTA_ACCESS_TOKEN` and `VISTA_SCOPE=openid vista_agent`.
-4. Start server with `uv run vista-mcp-server` and call a Vista-backed tool.
+- `401 authentication failed`: token missing/expired/invalid for chosen auth path.
+- `403 authorization failed`: token lacks scope/permission; enterprise list endpoints may require elevated access.
+- Delegated mode missing actor token: re-authenticate client and retry request.
 
-## Agent Studio auth mode mapping
+### Scope formatting pitfalls
 
-- If Agent Studio connection auth is `None`, run this server with `VISTA_AUTH_MODE=server-managed`.
-- If Agent Studio connection auth is `On behalf of actor token` (or Agent token), run this server with `VISTA_AUTH_MODE=delegated` or `hybrid` and configure a real OAuth client in Agent Studio.
-- Start with `VISTA_AUTH_MODE=delegated` + `VISTA_AUTH_STRATEGY=delegated_passthrough`.
-- Only switch to `VISTA_AUTH_STRATEGY=token_exchange` when Vista rejects actor tokens due to audience/token-type requirements.
-- A placeholder OAuth client in Agent Studio causes validation failures before MCP tool calls reach `/mcp`.
+- OAuth scope values must be space-delimited strings (`VISTA_SCOPE=openid vista_agent`).
+- If using `VISTA_AUTH_REQUIRED_SCOPES`, ensure each required scope exists in incoming delegated token scope claims.
 
-## Cursor MCP configuration
+### Oversized/partial data
 
-For stdio mode in Cursor MCP settings, use a command like:
+- Use compact analysis output defaults for large backlogs.
+- If partial list collection appears, retry with tuned page size/max pages/retry settings.
+- Enable strict mode (`require_complete=true` or `VISTA_ANALYSIS_FAIL_ON_PARTIAL=true`) for approval-critical workflows.
 
-- command: `uv`
-- args: `--directory`, `C:\Users\cforey\Documents\vista-unapproved-invoice`, `run`, `server.main`
+## Security Notes
 
-For streamable-http mode, configure Cursor to connect to the server URL (for example `http://127.0.0.1:8000/mcp`) instead of launching stdio.
-
-Ensure env vars are defined in the environment/context Cursor uses to start or connect to the server.
+- Do not commit real tokens, secrets, or `.env` values.
+- Prefer delegated or server-managed auth in hosted environments.
+- Use `VISTA_READ_ONLY_MODE=true` and/or `VISTA_WRITE_ENABLED_DOMAINS` for least-privilege write posture.
+- Use preflight tools and `dry_run=true` before bulk writes in production workflows.

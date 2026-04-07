@@ -218,7 +218,8 @@ Tools are declared centrally in `server/endpoint_registry.py` and registered by 
 - Project Cost Entry: `create_daily_production`, `get_daily_production_action`, `get_unposted_daily_production`, `list_unposted_daily_production`
 - Project Cost History: `get_project_cost_history`, `list_project_cost_history`
 - Project Phase: `get_project_phase`, `list_project_phases`
-- Purchase Order: `create_purchase_orders`, `get_purchase_order`, `get_purchase_order_action`, `get_unposted_purchase_order`, `list_purchase_orders`, `list_unposted_purchase_orders`
+- Equipment: `get_equipment`, `get_equipment_action`, `list_equipment`
+- Purchase Order: `get_purchase_order`, `get_purchase_order_action`, `get_unposted_purchase_order`, `list_purchase_orders`, `list_unposted_purchase_orders`
 - Unapproved Invoice: `create_unapproved_invoices`, `get_unapproved_invoice`, `get_unapproved_invoice_action`, `query_unapproved_invoices`
 - Sales Tax / Schedule Of Values / Standard Cost Type / Standard Phase: `get_*`, `list_*`
 - Subcontract: `get_subcontract`, `list_subcontracts`
@@ -234,6 +235,26 @@ Tools are declared centrally in `server/endpoint_registry.py` and registered by 
 - `capture_invoice_review_decision`
 - `preflight_invoice_approval`
 - `export_invoice_audit`
+- `compare_invoice_to_commitments` (invoice vs PO/subcontract totals and vendor match)
+- `collect_unapproved_invoices_pages` (full backlog via paged collection with partial safety)
+
+### Review workflows (prompts + planner)
+
+Orchestration hints for agents live in two places:
+
+- **`vista://schema/planner`** / **`vista://schema/tool-graph`**: `tools` includes Vista endpoints and analysis tools (version 4+); `workflows` lists `intent`, `tool_order`, and `decision_rules`.
+- **MCP prompts**: `triage_backlog_workflow`, `deep_verify_vendor_and_amount_workflow`, `resolve_duplicate_or_suspect_invoice_number_workflow`, `project_cost_context_workflow`, `pre_approval_gate_workflow`, `audit_closeout_workflow`, `vendor_master_spot_check_workflow`.
+
+See **`vista://guides/scenarios`** for prompt names and recommended tool order.
+
+### Bulk retry and full-list pagination
+
+- Retry guidance: **`vista://guides/bulk-retry`**, MCP prompt `bulk_write_retry_workflow`.
+- Walking all pages of `query_unapproved_invoices`: **`vista://guides/pagination-collections`** and tool `collect_unapproved_invoices_pages`.
+
+### Tool description examples
+
+- Endpoint and analysis MCP tool descriptions append short OpenAPI-aligned examples where curated (`server/openapi_intelligence.py`).
 
 ### Bulk preflight tools
 

@@ -89,12 +89,13 @@ async def test_bulk_tool_dry_run_does_not_call_api() -> None:
         resolve_enterprise_id=lambda value: value if value is not None else 1,
     )
 
-    create_po = mcp.tools["create_purchase_orders"]
-    result = await create_po(  # type: ignore[misc]
+    create_invoice = mcp.tools["create_unapproved_invoices"]
+    result = await create_invoice(  # type: ignore[misc]
         items={
             "companyId": "00000000-0000-0000-0000-000000000001",
-            "purchaseOrderNumber": "PO-10",
             "vendorId": "00000000-0000-0000-0000-000000000002",
+            "invoiceNumber": "INV-DRY",
+            "invoiceAmount": 10.0,
         },
         enterprise_id=1,
         dry_run=True,
@@ -186,9 +187,9 @@ def test_tool_description_is_enriched_with_required_inputs() -> None:
         get_request_token=lambda: None,
         resolve_enterprise_id=lambda value: value if value is not None else 1,
     )
-    description = mcp.descriptions["create_purchase_orders"]
+    description = mcp.descriptions["create_unapproved_invoices"]
     assert "Required inputs:" in description
-    assert "items[].purchaseOrderNumber" in description
+    assert "items[].invoiceNumber" in description
 
 
 @pytest.mark.anyio

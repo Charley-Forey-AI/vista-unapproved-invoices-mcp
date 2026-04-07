@@ -406,7 +406,7 @@ async def test_call_endpoint_builds_get_path_with_id_and_includes() -> None:
 
 
 @pytest.mark.anyio
-async def test_call_endpoint_builds_bulk_body_for_purchase_orders() -> None:
+async def test_call_endpoint_builds_bulk_body_for_unapproved_invoices() -> None:
     settings = VistaSettings(
         _env_file=None,
         api_base_url="https://api.example.com",
@@ -418,19 +418,19 @@ async def test_call_endpoint_builds_bulk_body_for_purchase_orders() -> None:
 
     async def _request(*args, **kwargs):  # type: ignore[no-untyped-def]
         bodies.append(kwargs.get("json"))
-        request = httpx.Request("POST", "https://api.example.com/api/v1/10/po/purchaseorder")
+        request = httpx.Request("POST", "https://api.example.com/api/v1/10/ap/unapprovedinvoice")
         return httpx.Response(200, json={"items": []}, request=request)
 
     client._client.request = _request  # type: ignore[method-assign]
 
     payload = await client.call_endpoint(
-        ENDPOINTS_BY_TOOL["create_purchase_orders"],
+        ENDPOINTS_BY_TOOL["create_unapproved_invoices"],
         path_params={"enterpriseId": 10},
-        bulk_items=[{"number": "PO-1"}],
+        bulk_items=[{"invoiceNumber": "INV-1"}],
     )
 
     assert payload["items"] == []
-    assert bodies == [{"items": [{"number": "PO-1"}]}]
+    assert bodies == [{"items": [{"invoiceNumber": "INV-1"}]}]
 
     await client.close()
 

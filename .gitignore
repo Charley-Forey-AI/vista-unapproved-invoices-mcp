@@ -6,3 +6,7 @@
 invoicecopies/
 *.pem
 *.key
+
+# Python
+__pycache__/
+*.py[cod]

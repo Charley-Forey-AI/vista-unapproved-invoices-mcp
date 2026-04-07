@@ -248,19 +248,35 @@ SCOPED_ENDPOINTS: tuple[EndpointSpec, ...] = (
         requires_enterprise_id=True,
     ),
     EndpointSpec(
-        tool_name="create_purchase_orders",
-        method="POST",
-        path="/api/v1/{enterpriseId}/po/purchaseorder",
-        summary="Create Purchase Orders in bulk.",
-        tag="Purchase Order Endpoints",
-        operation_kind="bulk",
-        request_schema_ref="#/components/schemas/PurchaseOrderActionRequestBulkActionBody",
-        response_schema_ref="#/components/schemas/PurchaseOrderActionRecordBulkApiActionResponse",
+        tool_name="get_equipment_action",
+        method="GET",
+        path="/api/v1/{enterpriseId}/eq/equipment/action/{id}",
+        summary="Get an Equipment Action by Id.",
+        tag="Equipment Endpoints",
+        operation_kind="get",
+        response_schema_ref="#/components/schemas/EquipmentActionRecordGetItemResponse",
         requires_enterprise_id=True,
-        required_inputs=("items[].companyId", "items[].purchaseOrderNumber", "items[].vendorId"),
-        produced_fields=("items[].item.id", "items[].statusCode", "items[].message"),
-        recommended_prerequisites=("get_vendor", "get_company", "get_project"),
-        write_domain="po",
+    ),
+    EndpointSpec(
+        tool_name="get_equipment",
+        method="GET",
+        path="/api/v1/{enterpriseId}/eq/equipment/{id}",
+        summary="Get an Equipment by Id.",
+        tag="Equipment Endpoints",
+        operation_kind="get",
+        response_schema_ref="#/components/schemas/EquipmentRecordGetItemResponse",
+        requires_enterprise_id=True,
+    ),
+    EndpointSpec(
+        tool_name="list_equipment",
+        method="POST",
+        path="/api/v1/{enterpriseId}/eq/equipment/query",
+        summary="List Equipment Records (paged).",
+        tag="Equipment Endpoints",
+        operation_kind="list",
+        request_schema_ref="#/components/schemas/EquipmentRecordFilterBody",
+        response_schema_ref="#/components/schemas/EquipmentRecordListPagedResponse",
+        requires_enterprise_id=True,
     ),
     EndpointSpec(
         tool_name="get_purchase_order_action",
@@ -591,6 +607,29 @@ ANALYSIS_TOOLS: tuple[AnalysisToolSpec, ...] = (
             "topRisks[]",
         ),
     ),
+    AnalysisToolSpec(
+        tool_name="compare_invoice_to_commitments",
+        summary=(
+            "Structured comparison of an unapproved invoice to posted purchase order and/or subcontract "
+            "(amounts, vendor match, line counts). Uses Vista GET payloads when PO/sub IDs are present."
+        ),
+        required_inputs=("enterprise_id", "invoice_id"),
+        produced_fields=(
+            "invoiceAmount",
+            "commitments",
+            "flags",
+            "deltas",
+        ),
+    ),
+    AnalysisToolSpec(
+        tool_name="collect_unapproved_invoices_pages",
+        summary=(
+            "Collect all pages from query_unapproved_invoices up to max_pages with partial-result safety. "
+            "Prefer this over manual paging when you need the full open backlog."
+        ),
+        required_inputs=("enterprise_id",),
+        produced_fields=("items", "pagesFetched", "partial", "errors", "pageSize", "maxPages"),
+    ),
 )
 ANALYSIS_BY_TOOL: dict[str, AnalysisToolSpec] = {tool.tool_name: tool for tool in ANALYSIS_TOOLS}
 
@@ -605,6 +644,18 @@ ID_SOURCE_MAP: dict[str, tuple[str, ...]] = {
     "phaseId": ("get_project_phase", "list_project_phases"),
     "purchaseOrderId": ("get_purchase_order", "list_purchase_orders"),
     "subcontractId": ("get_subcontract", "list_subcontracts"),
+    "equipmentId": ("get_equipment", "list_equipment"),
+}
+
+# IDs used only by analysis tools (merged into planner id_sources with Vista map).
+ANALYSIS_ID_SOURCE_MAP: dict[str, tuple[str, ...]] = {
+    "run_id": ("list_invoice_review_queues", "analyze_unapproved_invoices"),
+    "invoice_id": (
+        "query_unapproved_invoices",
+        "get_unapproved_invoice",
+        "get_invoice_review_packet",
+        "get_invoice_queue_page",
+    ),
 }
 
 
@@ -624,12 +675,13 @@ def endpoint_dependency_graph(settings: VistaSettings) -> dict[str, object]:
     """Build machine-readable dependency metadata for all enabled tools."""
 
     nodes: list[dict[str, object]] = []
+    combined_id_sources: dict[str, tuple[str, ...]] = {**ID_SOURCE_MAP, **ANALYSIS_ID_SOURCE_MAP}
 
     def _infer_id_sources(required_fields: list[str]) -> dict[str, list[str]]:
         sources: dict[str, list[str]] = {}
         for field in required_fields:
             normalized = field.replace("items[].", "")
-            for key, providers in ID_SOURCE_MAP.items():
+            for key, providers in combined_id_sources.items():
                 if normalized == key:
                     sources[normalized] = list(providers)
         return sources
@@ -675,6 +727,29 @@ def endpoint_dependency_graph(settings: VistaSettings) -> dict[str, object]:
             }
         )
 
+    for analysis in ANALYSIS_TOOLS:
+        required_inputs = list(analysis.required_inputs)
+        produced_fields = list(analysis.produced_fields)
+        nodes.append(
+            {
+                "tool": analysis.tool_name,
+                "tag": "Analysis Tools",
+                "kind": "analysis",
+                "method": None,
+                "path": None,
+                "required_inputs": required_inputs,
+                "produced_fields": produced_fields,
+                "requires": required_inputs,
+                "produces": produced_fields,
+                "prerequisites": [],
+                "id_sources": _infer_id_sources(required_inputs),
+                "safe_to_retry": False,
+                "response_schema_ref": None,
+                "request_schema_ref": None,
+                "write_domain": None,
+            }
+        )
+
     workflows: list[dict[str, object]] = [
         {
             "intent": "create_unapproved_invoice",
@@ -692,20 +767,6 @@ def endpoint_dependency_graph(settings: VistaSettings) -> dict[str, object]:
             ],
         },
         {
-            "intent": "create_purchase_order",
-            "tool_order": [
-                "get_company",
-                "list_vendors",
-                "get_vendor",
-                "list_projects",
-                "create_purchase_orders",
-            ],
-            "decision_rules": [
-                "If projectId is optional for your case, list_projects can be skipped.",
-                "If vendorId is known, call get_vendor only for validation.",
-            ],
-        },
-        {
             "intent": "investigate_invoice",
             "tool_order": [
                 "get_unapproved_invoice",
@@ -717,7 +778,105 @@ def endpoint_dependency_graph(settings: VistaSettings) -> dict[str, object]:
                 "Call get_project only when project context is needed.",
             ],
         },
+        {
+            "intent": "triage_backlog",
+            "tool_order": [
+                "analyze_unapproved_invoices",
+                "list_invoice_review_queues",
+                "get_invoice_queue_page",
+                "get_invoice_review_packet",
+                "preflight_invoice_approval",
+            ],
+            "decision_rules": [
+                "Use list_invoice_review_queues for a stored reviewer run and queue counts without full re-analysis.",
+                "Use analyze_unapproved_invoices for a fresh analysis over window_days when no run exists or source data changed.",
+                "After queues exist, page with get_invoice_queue_page then open get_invoice_review_packet per invoice.",
+                "Call preflight_invoice_approval when an explicit policy gate is needed before human approval.",
+                "Rely on analysis schema and policy checks before Vista enrichment unless investigating a specific field.",
+            ],
+        },
+        {
+            "intent": "deep_verify_vendor_and_amount",
+            "tool_order": [
+                "get_unapproved_invoice",
+                "get_invoice_review_packet",
+                "get_vendor",
+                "get_purchase_order",
+                "get_subcontract",
+                "compare_invoice_to_commitments",
+            ],
+            "decision_rules": [
+                "Use get_invoice_review_packet when run_id is available; otherwise get_unapproved_invoice.",
+                "Call get_vendor for master data validation.",
+                "If purchaseOrderId is present, call get_purchase_order; if subcontractId is present, call get_subcontract.",
+                "Call compare_invoice_to_commitments for structured vendor/amount/line deltas (PO line sum uses quantity*itemPrice).",
+            ],
+        },
+        {
+            "intent": "resolve_duplicate_or_suspect_invoice_number",
+            "tool_order": [
+                "query_unapproved_invoices",
+                "get_vendor",
+                "get_unapproved_invoice",
+            ],
+            "decision_rules": [
+                "Build filters on invoiceNumber, vendorId, and date or amount fields as needed.",
+                "Call get_vendor to confirm vendor identity across candidate rows.",
+                "Open each suspect row with get_unapproved_invoice for full detail.",
+            ],
+        },
+        {
+            "intent": "project_cost_context",
+            "tool_order": [
+                "get_project",
+                "list_project_phases",
+                "get_project_cost_history",
+                "list_project_cost_history",
+            ],
+            "decision_rules": [
+                "Resolve projectId from the invoice or review packet first.",
+                "Use list_project_phases when phase-level coding matters.",
+                "Use get_project_cost_history for one record by id; list_project_cost_history for paged queries.",
+            ],
+        },
+        {
+            "intent": "pre_approval_gate",
+            "tool_order": [
+                "get_invoice_review_packet",
+                "preflight_invoice_approval",
+                "capture_invoice_review_decision",
+            ],
+            "decision_rules": [
+                "Load get_invoice_review_packet before preflight_invoice_approval.",
+                "If preflight canApprove is true, record capture_invoice_review_decision; otherwise capture blockers from preflight output.",
+            ],
+        },
+        {
+            "intent": "audit_closeout",
+            "tool_order": [
+                "export_invoice_audit",
+                "list_invoice_review_queues",
+            ],
+            "decision_rules": [
+                "Call export_invoice_audit with run_id after reviewer decisions are recorded.",
+                "Use list_invoice_review_queues only when rediscovering run_id or queue metadata.",
+            ],
+        },
+        {
+            "intent": "vendor_master_spot_check",
+            "tool_order": [
+                "get_vendor",
+                "list_vendor_alternate_addresses",
+                "get_vendor_alternate_address",
+                "list_vendors",
+            ],
+            "decision_rules": [
+                "Prefer get_vendor when vendorId is known from the invoice or vendorGroups.",
+                "Use list_vendor_alternate_addresses or get_vendor_alternate_address for remit-to or address mismatches.",
+                "Use list_vendors with filters when resolving vendor by code or name.",
+            ],
+        },
     ]
 
-    return {"version": 2, "tools": nodes, "workflows": workflows}
+    return {"version": 4, "tools": nodes, "workflows": workflows}
 

@@ -132,3 +132,214 @@ def register_prompts(mcp: FastMCP) -> None:
             "See vista://guides/dependencies, vista://guides/filters, and vista://guides/response-interpretation."
         )
 
+    @mcp.prompt(
+        name="triage_backlog_workflow",
+        title="Triage Unapproved Invoice Backlog",
+        description=(
+            "Policy and schema review via analysis, then queue paging and packets; optional preflight before Vista enrichment."
+        ),
+    )
+    def triage_backlog_workflow(
+        enterprise_id: int | None = Field(
+            default=None,
+            description="Enterprise id or rely on VISTA_ENTERPRISE_ID.",
+        ),
+        prefer_stored_run: bool = Field(
+            default=False,
+            description="If true, start with list_invoice_review_queues; otherwise prefer analyze_unapproved_invoices.",
+        ),
+        window_days: int = Field(
+            default=30,
+            description="When using analyze_unapproved_invoices, history window in days.",
+        ),
+    ) -> str:
+        start = (
+            "1) list_invoice_review_queues (enterprise_id) to create or reuse a run and get queue counts."
+            if prefer_stored_run
+            else (
+                f"1) analyze_unapproved_invoices (enterprise_id, window_days={window_days}) for fresh analysis and queues."
+            )
+        )
+        return "\n".join(
+            [
+                "Resolve enterprise: pass enterprise_id or VISTA_ENTERPRISE_ID.",
+                start,
+                "2) get_invoice_queue_page with run_id and queue name; repeat with nextCursor until done.",
+                "3) For each item, get_invoice_review_packet (run_id, invoice_id) for findings and risk.",
+                "4) Optionally preflight_invoice_approval before any approval narrative.",
+                "5) Defer Vista get_* until you need to validate a specific field against ERP.",
+                "See vista://schema/planner (intent triage_backlog), vista://guides/filters.",
+                f"enterprise_id hint: {enterprise_id}",
+            ]
+        )
+
+    @mcp.prompt(
+        name="deep_verify_vendor_and_amount_workflow",
+        title="Deep Verify Vendor And Commitment Amounts",
+        description="Invoice or packet, vendor master data, then PO or subcontract; compare amounts in reasoning.",
+    )
+    def deep_verify_vendor_and_amount_workflow(
+        invoice_id: str = Field(description="Unapproved invoice UUID."),
+        run_id: str | None = Field(
+            default=None,
+            description="Optional reviewer run id; if set, use get_invoice_review_packet first.",
+        ),
+    ) -> str:
+        packet_step = (
+            f"1) get_invoice_review_packet (run_id={run_id}, invoice_id={invoice_id})."
+            if run_id
+            else f"1) get_unapproved_invoice (invoice_id={invoice_id})."
+        )
+        return "\n".join(
+            [
+                "Resolve enterprise context first.",
+                packet_step,
+                "2) get_vendor using vendorId from the invoice or packet.",
+                "3) If purchaseOrderId is set, get_purchase_order; if subcontractId is set, get_subcontract.",
+                "4) Compare invoice amount and lines to PO or subcontract totals in reasoning (no automated compare tool yet).",
+                "See vista://schema/planner (intent deep_verify_vendor_and_amount).",
+            ]
+        )
+
+    @mcp.prompt(
+        name="resolve_duplicate_or_suspect_invoice_number_workflow",
+        title="Resolve Duplicate Or Suspect Invoice Numbers",
+        description="Query open backlog, confirm vendor, open each candidate invoice.",
+    )
+    def resolve_duplicate_or_suspect_invoice_number_workflow(
+        invoice_number_hint: str = Field(description="Invoice number or fragment to search."),
+        vendor_id: str | None = Field(
+            default=None,
+            description="Optional vendor UUID to narrow candidates.",
+        ),
+    ) -> str:
+        vendor_line = (
+            f"2) Add filter vendorId eq [{vendor_id}] if narrowing." if vendor_id else "2) Add vendor filters if known."
+        )
+        return "\n".join(
+            [
+                "1) query_unapproved_invoices with filters on invoiceNumber (contains or eq) and date or amount as needed.",
+                vendor_line,
+                "3) get_vendor for each distinct vendorId in results.",
+                "4) get_unapproved_invoice for each candidate id to compare full payloads.",
+                "See vista://guides/filters and vista://schema/planner (intent resolve_duplicate_or_suspect_invoice_number).",
+                f"Search hint: {invoice_number_hint}",
+            ]
+        )
+
+    @mcp.prompt(
+        name="project_cost_context_workflow",
+        title="Project And Cost History Context For An Invoice",
+        description="Project detail, optional phases, then cost history list or get by id.",
+    )
+    def project_cost_context_workflow(
+        project_id: str = Field(description="Project UUID from invoice or packet."),
+        cost_history_id: str | None = Field(
+            default=None,
+            description="If you already have a project cost history id, call get_project_cost_history directly.",
+        ),
+    ) -> str:
+        if cost_history_id:
+            tail = (
+                f"2) get_project_cost_history (id={cost_history_id}).\n"
+                "3) Optionally list_project_cost_history with filters for broader history."
+            )
+        else:
+            tail = (
+                "2) list_project_phases if phase coding matters.\n"
+                "3) list_project_cost_history with filters or get_project_cost_history when you have a specific id."
+            )
+        return "\n".join(
+            [
+                f"1) get_project (id={project_id}).",
+                tail,
+                "See vista://schema/planner (intent project_cost_context).",
+            ]
+        )
+
+    @mcp.prompt(
+        name="pre_approval_gate_workflow",
+        title="Pre-Approval Policy Gate And Decision",
+        description="Packet, preflight, then capture decision with explicit branch on canApprove.",
+    )
+    def pre_approval_gate_workflow(
+        run_id: str = Field(description="Reviewer analysis run id."),
+        invoice_id: str = Field(description="Invoice UUID within the run."),
+    ) -> str:
+        return "\n".join(
+            [
+                f"1) get_invoice_review_packet (run_id={run_id}, invoice_id={invoice_id}).",
+                f"2) preflight_invoice_approval (run_id={run_id}, invoice_id={invoice_id}).",
+                "3) If canApprove, call capture_invoice_review_decision with approve or equivalent.",
+                "4) If not canApprove, record decision with rationale from blockingIssues or document fix steps; do not treat as approved.",
+                "See vista://schema/planner (intent pre_approval_gate).",
+            ]
+        )
+
+    @mcp.prompt(
+        name="audit_closeout_workflow",
+        title="Audit Export After Review",
+        description="Export run metadata and decisions after review is complete.",
+    )
+    def audit_closeout_workflow(
+        run_id: str = Field(description="Reviewer run id to export."),
+    ) -> str:
+        return "\n".join(
+            [
+                f"1) export_invoice_audit (run_id={run_id}) for run metadata, totals, and reviewer decisions.",
+                "2) Use list_invoice_review_queues only if run_id was unknown and you need to discover runs.",
+                "See vista://schema/planner (intent audit_closeout).",
+            ]
+        )
+
+    @mcp.prompt(
+        name="vendor_master_spot_check_workflow",
+        title="Vendor Master Data Spot Check",
+        description="Validate vendor record and alternate addresses for high-risk or mismatched remit context.",
+    )
+    def vendor_master_spot_check_workflow(
+        vendor_id: str | None = Field(
+            default=None,
+            description="Vendor UUID when known.",
+        ),
+        vendor_code_hint: str | None = Field(
+            default=None,
+            description="When vendor_id unknown, filter list_vendors by vendorCode or name.",
+        ),
+    ) -> str:
+        if vendor_id:
+            steps = [
+                f"1) get_vendor (id={vendor_id}).",
+                "2) list_vendor_alternate_addresses or get_vendor_alternate_address if remit-to does not match invoice.",
+            ]
+        else:
+            steps = [
+                f"1) list_vendors with filters for code or name (hint: {vendor_code_hint}).",
+                "2) get_vendor for the chosen id.",
+                "3) list_vendor_alternate_addresses or get_vendor_alternate_address as needed.",
+            ]
+        steps.append("See vista://guides/filters and vista://schema/planner (intent vendor_master_spot_check).")
+        return "\n".join(steps)
+
+    @mcp.prompt(
+        name="bulk_write_retry_workflow",
+        title="Bulk Write Partial Failure And Retry",
+        description="Retry only failed bulk rows with preflight and stable correlation.",
+    )
+    def bulk_write_retry_workflow(
+        bulk_tool_name: str = Field(
+            default="create_unapproved_invoices",
+            description="Bulk Vista tool that returned partial success.",
+        ),
+    ) -> str:
+        return "\n".join(
+            [
+                "1) Read each row in the bulk response items[].",
+                "2) For rows without a successful item.id, capture statusCode and message.",
+                "3) Call validate_<tool_name>_request (e.g. validate_create_unapproved_invoices_request) for corrected rows only.",
+                f"4) Call {bulk_tool_name} again with only failed/corrected items (not the whole batch).",
+                "5) Optional: set correlation_id or VISTA_CORRELATION_ID for traceability across retries.",
+                "See vista://guides/bulk-retry and vista://guides/errors-and-edge-cases.",
+            ]
+        )
+

@@ -124,7 +124,7 @@ def create_server(settings: VistaSettings) -> FastMCP:
     mcp = FastMCP(
         name="vista",
         instructions=(
-            "Tools for Enterprise, Company, Contract, Customer, Project, PO, AP, Vendor, and Health Vista APIs. "
+            "Tools for Enterprise, Company, Contract, Customer, Project, Equipment, PO, AP, Vendor, and Health Vista APIs. "
             "Use list/query tools to discover IDs and pagination state, then pass IDs to get/action tools. "
             "For complex tasks, read vista://guides/dependencies, vista://guides/workflows, "
             "vista://guides/response-interpretation, vista://guides/filters, and "

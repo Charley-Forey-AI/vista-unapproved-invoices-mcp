@@ -34,3 +34,10 @@ def test_bulk_request_model_enforces_purchase_order_required_fields() -> None:
     with pytest.raises(ValidationError):
         model.model_validate({"items": [{"vendorId": "00000000-0000-0000-0000-000000000002"}]})
 
+
+def test_bulk_request_model_enforces_equipment_required_fields() -> None:
+    model = request_model_for_schema("#/components/schemas/EquipmentActionRequestBulkActionBody")
+    assert model is not None
+    with pytest.raises(ValidationError):
+        model.model_validate({"items": [{"companyId": "00000000-0000-0000-0000-000000000001"}]})
+

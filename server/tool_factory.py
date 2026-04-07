@@ -14,11 +14,12 @@ from uuid import UUID
 from pydantic import Field, ValidationError
 
 from .api import VistaApiClient
-from .endpoint_registry import ANALYSIS_BY_TOOL, ENDPOINTS_BY_TOOL, EndpointSpec, iter_enabled_endpoints
+from .endpoint_registry import ANALYSIS_BY_TOOL, ENDPOINTS_BY_TOOL, AnalysisToolSpec, EndpointSpec, iter_enabled_endpoints
 from .generated_models import model_for_response_schema, request_model_for_schema
 from .models import QueryFilter, QueryRequest
 from .normalization import normalize_payload
-from .openapi_intelligence import required_fields_for_request_schema
+from .invoice_commitment_compare import compare_invoice_to_commitments as build_commitment_comparison
+from .openapi_intelligence import enrich_tool_description, required_fields_for_request_schema
 from .services.analysis_runs import AnalysisRunStore, decode_offset_cursor, encode_offset_cursor
 from .services.analysis_cache import AnalysisCache
 from .services.invoice_analysis import AnalysisConfig, analyze_invoices
@@ -276,6 +277,10 @@ def normalize_bulk_items(
     return normalized
 
 
+def _description_for_analysis(spec: AnalysisToolSpec) -> str:
+    return enrich_tool_description(spec.tool_name, spec.summary)
+
+
 def _description_for_endpoint(spec: EndpointSpec) -> str:
     required_fields = required_fields_for_request_schema(spec.request_schema_ref)
     required_inputs = list(spec.required_inputs) or required_fields
@@ -291,7 +296,7 @@ def _description_for_endpoint(spec: EndpointSpec) -> str:
         lines.append("Recommended prerequisites: " + " -> ".join(spec.recommended_prerequisites))
     if spec.operation_kind == "bulk":
         lines.append("Supports dry_run for validation-only preflight.")
-    return " ".join(lines)
+    return enrich_tool_description(spec.tool_name, " ".join(lines))
 
 
 def register_endpoint_tools(
@@ -837,9 +842,9 @@ def register_endpoint_tools(
 
     def _register_unapproved_invoice_analysis_tool() -> None:
         spec = ANALYSIS_BY_TOOL["analyze_unapproved_invoices"]
-        description = (
-            f"{spec.summary} "
-            "Use this for reviewer-ready recommendations without performing write actions."
+        description = enrich_tool_description(
+            spec.tool_name,
+            f"{spec.summary} Use this for reviewer-ready recommendations without performing write actions.",
         )
 
         async def tool(
@@ -1025,7 +1030,7 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     def _register_get_invoice_queue_page_tool() -> None:
         spec = ANALYSIS_BY_TOOL["get_invoice_queue_page"]
@@ -1057,7 +1062,7 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     def _register_get_invoice_review_packet_tool() -> None:
         spec = ANALYSIS_BY_TOOL["get_invoice_review_packet"]
@@ -1086,7 +1091,7 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     def _register_capture_invoice_review_decision_tool() -> None:
         spec = ANALYSIS_BY_TOOL["capture_invoice_review_decision"]
@@ -1123,7 +1128,7 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     def _register_preflight_invoice_approval_tool() -> None:
         spec = ANALYSIS_BY_TOOL["preflight_invoice_approval"]
@@ -1168,7 +1173,7 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     def _register_export_invoice_audit_tool() -> None:
         spec = ANALYSIS_BY_TOOL["export_invoice_audit"]
@@ -1199,7 +1204,137 @@ def register_endpoint_tools(
 
         tool.__name__ = spec.tool_name
         tool.__doc__ = spec.summary
-        mcp.tool(description=spec.summary)(tool)
+        mcp.tool(description=_description_for_analysis(spec))(tool)
+
+    def _register_compare_invoice_to_commitments_tool() -> None:
+        spec = ANALYSIS_BY_TOOL["compare_invoice_to_commitments"]
+
+        async def tool(
+            invoice_id: str = Field(description="Unapproved invoice UUID."),
+            enterprise_id: int | None = Field(
+                default=None,
+                description="Enterprise id. Optional when VISTA_ENTERPRISE_ID is configured.",
+            ),
+            run_id: str | None = Field(
+                default=None,
+                description="Optional reviewer run id to reuse invoice snapshot from analysis queues.",
+            ),
+            correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
+            output: str = Field(default="raw", description="Output mode: raw, normalized, or both."),
+        ) -> str:
+            async def run() -> str:
+                resolved = resolve_enterprise_id(enterprise_id)
+                invoice: dict[str, Any] | None = None
+                if run_id:
+                    run_state = _RUN_STORE.get_run(run_id)
+                    if run_state is None:
+                        raise ValueError("run_id not found or expired.")
+                    found = _find_invoice(run_state.get("analysis", {}), invoice_id)
+                    if not isinstance(found, dict):
+                        raise ValueError("invoice_id not found in run queues.")
+                    invoice = dict(found)
+                if invoice is None:
+                    inv_spec = ENDPOINTS_BY_TOOL["get_unapproved_invoice"]
+                    payload = await api.call_endpoint(
+                        inv_spec,
+                        path_params={"enterpriseId": resolved, "id": str(invoice_id)},
+                        correlation_id=correlation_id,
+                    )
+                    raw_item = payload.get("item")
+                    if not isinstance(raw_item, dict):
+                        raise ValueError("get_unapproved_invoice returned no item.")
+                    invoice = dict(raw_item)
+
+                po_payload: dict[str, Any] | None = None
+                sub_payload: dict[str, Any] | None = None
+                po_id = invoice.get("purchaseOrderId")
+                sub_id = invoice.get("subcontractId")
+                if po_id:
+                    try:
+                        po_payload = await api.call_endpoint(
+                            ENDPOINTS_BY_TOOL["get_purchase_order"],
+                            path_params={"enterpriseId": resolved, "id": str(po_id)},
+                            correlation_id=correlation_id,
+                        )
+                    except RuntimeError:
+                        po_payload = None
+                if sub_id:
+                    try:
+                        sub_payload = await api.call_endpoint(
+                            ENDPOINTS_BY_TOOL["get_subcontract"],
+                            path_params={"enterpriseId": resolved, "id": str(sub_id)},
+                            correlation_id=correlation_id,
+                        )
+                    except RuntimeError:
+                        sub_payload = None
+
+                compared = build_commitment_comparison(invoice, po_payload=po_payload, sub_payload=sub_payload)
+                compared["enterpriseId"] = resolved
+                compared["invoiceSource"] = "review_run" if run_id else "get_unapproved_invoice"
+                return _serialize_custom_output(tool_name=spec.tool_name, raw_payload=compared, output_mode=output)
+
+            return await with_tool_error_logging(
+                spec.tool_name,
+                run,
+                enterprise_id=enterprise_id,
+                correlation_id=correlation_id,
+            )
+
+        tool.__name__ = spec.tool_name
+        tool.__doc__ = spec.summary
+        mcp.tool(description=_description_for_analysis(spec))(tool)
+
+    def _register_collect_unapproved_invoices_pages_tool() -> None:
+        spec = ANALYSIS_BY_TOOL["collect_unapproved_invoices_pages"]
+        list_spec = ENDPOINTS_BY_TOOL["query_unapproved_invoices"]
+
+        async def tool(
+            enterprise_id: int | None = Field(
+                default=None,
+                description="Enterprise id. Optional when VISTA_ENTERPRISE_ID is configured.",
+            ),
+            filters: list[QueryFilter | dict[str, Any]] | dict[str, Any] | None = Field(
+                default=None,
+                description="Optional filters: [{field, operator, values[]}].",
+            ),
+            order_by: str | None = Field(default=None, description="Optional orderBy query value."),
+            order_by_asc: bool | None = Field(default=None, description="Optional orderByAsc query value."),
+            page_size: int = Field(default=100, description="Page size per request (max 100)."),
+            max_pages: int = Field(default=20, description="Maximum pages to collect."),
+            includes: str | None = Field(default=None, description="Optional includes query value."),
+            correlation_id: str | None = Field(default=None, description="Optional x-correlation-id header."),
+            output: str = Field(default="raw", description="Output mode: raw, normalized, or both."),
+        ) -> str:
+            async def run() -> str:
+                resolved = resolve_enterprise_id(enterprise_id)
+                query = build_query(filters)
+                body = query.model_dump(by_alias=True, exclude_none=True)
+                request_model = request_model_for_schema(list_spec.request_schema_ref)
+                if request_model is not None:
+                    body = request_model.model_validate(body).model_dump(by_alias=True, exclude_none=True)
+                payload = await api.collect_list_pages(
+                    list_spec,
+                    path_params={"enterpriseId": resolved},
+                    query_body=body,
+                    includes=includes,
+                    order_by=order_by,
+                    order_by_asc=order_by_asc,
+                    page_size=page_size,
+                    max_pages=max_pages,
+                    correlation_id=correlation_id,
+                )
+                return _serialize_custom_output(tool_name=spec.tool_name, raw_payload=payload, output_mode=output)
+
+            return await with_tool_error_logging(
+                spec.tool_name,
+                run,
+                enterprise_id=enterprise_id,
+                correlation_id=correlation_id,
+            )
+
+        tool.__name__ = spec.tool_name
+        tool.__doc__ = spec.summary
+        mcp.tool(description=_description_for_analysis(spec))(tool)
 
     for endpoint in iter_enabled_endpoints(settings):
         if endpoint.operation_kind == "get":
@@ -1219,6 +1354,8 @@ def register_endpoint_tools(
     _register_capture_invoice_review_decision_tool()
     _register_preflight_invoice_approval_tool()
     _register_export_invoice_audit_tool()
+    _register_compare_invoice_to_commitments_tool()
+    _register_collect_unapproved_invoices_pages_tool()
 
 
 def get_tool_metrics_snapshot() -> dict[str, dict[str, float | int]]:

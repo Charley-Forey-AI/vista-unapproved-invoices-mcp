@@ -61,3 +61,54 @@ def required_fields_for_request_schema(schema_ref: str | None) -> list[str]:
 
     return list(top_required)
 
+
+# Short OpenAPI-aligned examples appended to MCP tool descriptions (reduce bad calls).
+_TOOL_DESCRIPTION_EXAMPLES: dict[str, str] = {
+    "query_unapproved_invoices": (
+        'Example filters JSON: [{"field":"invoiceNumber","operator":"contains","values":["INV-2026"]}, '
+        '{"field":"vendorId","operator":"eq","values":["00000000-0000-0000-0000-000000000001"]}]. '
+        "Use limit/page for pagination."
+    ),
+    "list_vendors": (
+        'Example filters: [{"field":"vendorCode","operator":"eq","values":["V-1001"]}] or '
+        '[{"field":"name","operator":"contains","values":["Acme"]}].'
+    ),
+    "list_projects": (
+        'Example filters: [{"field":"job","operator":"eq","values":["J-2205"]}, '
+        '{"field":"companyCode","operator":"eq","values":["01"]}].'
+    ),
+    "create_unapproved_invoices": (
+        "Example items[] keys: companyId, vendorId, invoiceNumber, invoiceAmount (UUIDs as strings). "
+        "Use validate_create_unapproved_invoices_request before submit in production."
+    ),
+    "create_daily_production": (
+        "Example items[] keys: companyId, phaseId, projectId, quantityCompleted (per OpenAPI DailyProduction action item)."
+    ),
+    "get_unapproved_invoice": (
+        "Pass id as the unapproved invoice UUID from query_unapproved_invoices items[].id."
+    ),
+    "get_purchase_order": (
+        "Pass id as posted PO UUID from invoice purchaseOrderId or list_purchase_orders items[].id."
+    ),
+    "get_subcontract": (
+        "Pass id as subcontract UUID from invoice subcontractId or list_subcontracts items[].id."
+    ),
+    "compare_invoice_to_commitments": (
+        "Pass enterprise_id and invoice_id; optional run_id to reuse invoice snapshot from a reviewer run. "
+        "Fetches PO/sub from Vista when IDs are present."
+    ),
+    "collect_unapproved_invoices_pages": (
+        "Walks query_unapproved_invoices pages until max_pages or short page; set page_size<=100. "
+        "Returns partial=true if a page errored mid-collection."
+    ),
+}
+
+
+def enrich_tool_description(tool_name: str, base: str) -> str:
+    """Append a compact example line when we have curated guidance for this tool."""
+
+    extra = _TOOL_DESCRIPTION_EXAMPLES.get(tool_name)
+    if not extra:
+        return base
+    return f"{base} {extra}"
+

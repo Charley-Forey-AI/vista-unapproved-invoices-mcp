@@ -45,7 +45,7 @@ def register_resources(mcp: FastMCP, settings: VistaSettings) -> None:
 4. `list_projects` or `get_project` (optional project/contract context)
 5. `create_unapproved_invoices`
 
-See also: `vista://guides/workflows`, `vista://guides/response-interpretation`, `vista://guides/filters`, `vista://guides/errors-and-edge-cases`, `vista://guides/scenarios`
+See also: `vista://guides/workflows`, `vista://guides/response-interpretation`, `vista://guides/filters`, `vista://guides/errors-and-edge-cases`, `vista://guides/bulk-retry`, `vista://guides/pagination-collections`, `vista://guides/scenarios`
 """
 
     @mcp.resource(
@@ -299,6 +299,60 @@ Operator support depends on API behavior and entity field compatibility.
 """
 
     @mcp.resource(
+        "vista://guides/bulk-retry",
+        name="vista-bulk-retry-guide",
+        title="Bulk Write Retry And Idempotency",
+        description="How to retry only failed bulk rows and use stable correlation keys.",
+        mime_type="text/markdown",
+    )
+    def bulk_retry_guide() -> str:
+        return """# Bulk Write Retry And Idempotency
+
+## Row-Independent Outcomes
+- Bulk tools (`create_unapproved_invoices`, `create_daily_production`, etc.) return one result object per input row.
+- Successful rows include `item` with created ids; failed rows include `statusCode`, `message`, and may omit `item`.
+
+## Retry Only Failed Rows
+- Do not resubmit the full batch after a partial failure unless you intentionally want duplicate creates.
+- Identify failed indices from the response, fix payload fields, and call the bulk tool again with **only** those items.
+
+## Stable Client Keys For Agents
+- When an agent retries, pass a deterministic `x-correlation-id` (or rely on `VISTA_CORRELATION_ID`) so support can trace a single logical operation in Vista logs.
+- For human review, correlate retries using natural keys in your payload: `invoiceNumber` + `vendorId` + `companyId` should uniquely identify an intended invoice line before duplicate submission.
+
+## Preflight Before Retry
+- Call `validate_<tool_name>_request` for the same bulk tool to catch missing fields before the second POST.
+
+See also: `vista://guides/errors-and-edge-cases`, bulk preflight tools in README.
+"""
+
+    @mcp.resource(
+        "vista://guides/pagination-collections",
+        name="vista-pagination-collections-guide",
+        title="Full-List Pagination For Unapproved Invoices",
+        description="Walking all pages safely vs manual paging.",
+        mime_type="text/markdown",
+    )
+    def pagination_collections_guide() -> str:
+        return """# Full-List Pagination (Unapproved Invoices)
+
+## Preferred: collect_unapproved_invoices_pages
+- MCP tool that wraps `query_unapproved_invoices` with `VistaApiClient.collect_list_pages`.
+- Parameters: `page_size` (capped, max 100), `max_pages`, optional `filters`, `order_by`, `includes`.
+- Response includes `items` (concatenated), `pagesFetched`, `partial` (true if a page failed mid-collection), and `errors` per failed page.
+- Use when you need the **entire** open backlog matching filters, not a single page.
+
+## Manual Pattern
+- Call `query_unapproved_invoices` with `limit` and `page` starting at 1.
+- Increment `page` until `items` length is less than `limit` or `currentPage` indicates the last page.
+
+## Partial Results
+- If `partial` is true on `collect_unapproved_invoices_pages`, treat the item list as incomplete; fix upstream errors or reduce concurrency and retry.
+
+See also: `vista://guides/filters`.
+"""
+
+    @mcp.resource(
         "vista://guides/scenarios",
         name="vista-scenarios-guide",
         title="Vista Scenarios Quick Reference",
@@ -332,5 +386,40 @@ Operator support depends on API behavior and entity field compatibility.
 - Prompt: `handle_invoice_create_partial_failure_workflow`
 - Read first: `vista://guides/errors-and-edge-cases`
 - Tool order: `create_unapproved_invoices` -> inspect per-row result -> retry failed rows only
+
+## Triage Backlog (analysis first)
+- Prompt: `triage_backlog_workflow`
+- Read first: `vista://schema/planner` (intent `triage_backlog`)
+- Tool order: `analyze_unapproved_invoices` or `list_invoice_review_queues` -> `get_invoice_queue_page` -> `get_invoice_review_packet` -> optional `preflight_invoice_approval`
+
+## Deep Verify Vendor And Amounts
+- Prompt: `deep_verify_vendor_and_amount_workflow`
+- Read first: `vista://guides/response-interpretation`
+- Tool order: `get_unapproved_invoice` or `get_invoice_review_packet` -> `get_vendor` -> `get_purchase_order` / `get_subcontract` (if IDs present) -> `compare_invoice_to_commitments`
+
+## Resolve Duplicate Or Suspect Invoice Number
+- Prompt: `resolve_duplicate_or_suspect_invoice_number_workflow`
+- Read first: `vista://guides/filters`
+- Tool order: `query_unapproved_invoices` -> `get_vendor` -> `get_unapproved_invoice` (per candidate)
+
+## Project Cost Context
+- Prompt: `project_cost_context_workflow`
+- Read first: `vista://guides/response-interpretation`
+- Tool order: `get_project` -> optional `list_project_phases` -> `get_project_cost_history` / `list_project_cost_history`
+
+## Pre-Approval Gate
+- Prompt: `pre_approval_gate_workflow`
+- Read first: `vista://schema/planner` (intent `pre_approval_gate`)
+- Tool order: `get_invoice_review_packet` -> `preflight_invoice_approval` -> `capture_invoice_review_decision`
+
+## Audit Closeout
+- Prompt: `audit_closeout_workflow`
+- Read first: `vista://guides/errors-and-edge-cases` (traceability)
+- Tool order: `export_invoice_audit` (optional `list_invoice_review_queues` to discover `run_id`)
+
+## Vendor Master Spot Check
+- Prompt: `vendor_master_spot_check_workflow`
+- Read first: `vista://guides/filters`
+- Tool order: `get_vendor` or `list_vendors` -> `list_vendor_alternate_addresses` / `get_vendor_alternate_address`
 """
 

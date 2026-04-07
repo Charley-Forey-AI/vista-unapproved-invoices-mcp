@@ -8,7 +8,7 @@ from server.generated_models import model_for_response_schema
 def test_scoped_registry_has_unique_tool_names() -> None:
     names = [endpoint.tool_name for endpoint in SCOPED_ENDPOINTS]
     assert len(names) == len(set(names))
-    assert len(SCOPED_ENDPOINTS) == 45
+    assert len(SCOPED_ENDPOINTS) == 47
 
 
 def test_optional_endpoints_honor_settings_flags() -> None:
@@ -53,7 +53,7 @@ def test_dependency_graph_contains_required_io_metadata() -> None:
         bearer_token="token",
     )
     graph = endpoint_dependency_graph(settings)
-    assert graph["version"] == 2
+    assert graph["version"] == 4
     tools = graph["tools"]
     assert isinstance(tools, list)
     vendor_node = next(node for node in tools if node["tool"] == "get_vendor")
@@ -78,4 +78,43 @@ def test_dependency_graph_contains_workflow_decision_rules() -> None:
     create_invoice = next(item for item in workflows if item["intent"] == "create_unapproved_invoice")
     assert "tool_order" in create_invoice
     assert "decision_rules" in create_invoice
+
+
+def test_dependency_graph_contains_invoice_review_workflow_intents() -> None:
+    settings = VistaSettings(
+        _env_file=None,
+        api_base_url="https://api.example.com",
+        bearer_token="token",
+    )
+    graph = endpoint_dependency_graph(settings)
+    intents = {item["intent"]: item for item in graph["workflows"]}
+    expected = (
+        "triage_backlog",
+        "deep_verify_vendor_and_amount",
+        "resolve_duplicate_or_suspect_invoice_number",
+        "project_cost_context",
+        "pre_approval_gate",
+        "audit_closeout",
+        "vendor_master_spot_check",
+    )
+    for intent in expected:
+        assert intent in intents
+        assert "tool_order" in intents[intent]
+        assert "decision_rules" in intents[intent]
+
+
+def test_dependency_graph_includes_analysis_tool_nodes() -> None:
+    settings = VistaSettings(
+        _env_file=None,
+        api_base_url="https://api.example.com",
+        bearer_token="token",
+    )
+    graph = endpoint_dependency_graph(settings)
+    tools = graph["tools"]
+    names = {node["tool"] for node in tools}
+    assert "compare_invoice_to_commitments" in names
+    assert "collect_unapproved_invoices_pages" in names
+    compare_node = next(n for n in tools if n["tool"] == "compare_invoice_to_commitments")
+    assert compare_node["kind"] == "analysis"
+    assert "invoice_id" in compare_node["id_sources"]
 
